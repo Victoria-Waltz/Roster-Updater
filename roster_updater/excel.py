@@ -71,11 +71,15 @@ def _write_rows(worksheet, start_row: int, rows: Iterable[Iterable[Any]]) -> int
     return current - 1
 
 
-def _style_table_sheet(worksheet, header_row: int, last_row: int, last_column: int) -> None:
-    """Apply shared heading/body styles, freeze panes, and an Excel filter.
+def _style_table_sheet(
+    worksheet, header_row: int, last_row: int, last_column: int,
+    add_filter: bool = True,
+) -> None:
+    """Apply shared heading/body styles, freeze panes, and an optional filter.
 
     Coordinates are one-based. This formats a worksheet region; callers add
-    structured Excel Table objects separately when data rows exist.
+    structured Excel Table objects separately when data rows exist. Pass
+    add_filter=False for those sheets: each table owns its own AutoFilter.
     """
     for cell in worksheet[header_row]:
         if cell.column <= last_column:
@@ -89,7 +93,11 @@ def _style_table_sheet(worksheet, header_row: int, last_row: int, last_column: i
             cell.alignment = Alignment(vertical="center")
     worksheet.freeze_panes = worksheet.cell(header_row + 1, 1)
     worksheet.sheet_view.showGridLines = False
-    worksheet.auto_filter.ref = f"A{header_row}:{_column_letter(last_column)}{max(header_row, last_row)}"
+    # A structured table supplies its own filter; do not duplicate it on the sheet.
+    worksheet.auto_filter.ref = (
+        f"A{header_row}:{_column_letter(last_column)}{max(header_row, last_row)}"
+        if add_filter else None
+    )
 
 
 def _column_letter(column: int) -> str:
@@ -133,7 +141,7 @@ def write_baseline(path: str | Path, rows: list[dict[str, Any]]) -> Path:
         2,
         ([clean(row.get(header)) for header in BASELINE_HEADERS] for row in rows),
     )
-    _style_table_sheet(worksheet, 1, last_row, len(BASELINE_HEADERS))
+    _style_table_sheet(worksheet, 1, last_row, len(BASELINE_HEADERS), add_filter=False)
     _fit_columns(worksheet)
     # Excel structured tables need data rows; an empty roster keeps headings only.
     if last_row >= 2:
@@ -151,3 +159,4 @@ def write_baseline(path: str | Path, rows: list[dict[str, Any]]) -> Path:
     workbook.save(temp_path)
     os.replace(temp_path, output)
     return output
+
