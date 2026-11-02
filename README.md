@@ -1,5 +1,9 @@
 # TAIT Roster Updater
 
+## Code organization
+
+Application code lives in `roster_updater/`, with desktop interface code in `roster_updater/ui/`, development tools in `scripts/`, and regression tests in `tests/`. See [the project structure guide](docs/PROJECT_STRUCTURE.md) for a file-by-file map and development commands. The existing Windows launch and build scripts still work from the repository root.
+
 This is a local Python application for comparing Sven's monthly active-user file with the approved employee baseline. Employee data stays in the folder selected by the user. The application does not upload data to an external service.
 
 ## What it produces
@@ -81,4 +85,5 @@ The baseline may also include `ERP Category`. The app carries this value forward
 - A manager is flagged as potentially inactive when the manager cannot be found in the new active-user pull.
 - The application can still approve a month with unresolved items, but it warns the user first.
 - Do not place the shared data folder inside the application folder. Keep it in a company-approved shared location.
+
 

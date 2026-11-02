@@ -4,4 +4,6 @@ build/
 dist/
 __pycache__/
 *.pyc
+sample_data/
+
 
