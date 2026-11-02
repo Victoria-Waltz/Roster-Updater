@@ -13,6 +13,11 @@ from .utils import clean, file_sha256, normalize_header, normalize_key
 
 
 def _validate_rows(rows: list[dict[str, Any]], source: Path) -> None:
+    """Reject empty rosters and duplicate nonblank Logon Name values.
+
+    Matching is case-insensitive. The caller filters out blank-key rows.
+    Raise RosterError with the source filename and up to five duplicate keys.
+    """
     if not rows:
         raise RosterError(f"No employee rows were found in {source.name}.")
 
@@ -40,6 +45,11 @@ def _validate_rows(rows: list[dict[str, Any]], source: Path) -> None:
 
 
 def _canonicalize_row(raw: dict[str, Any]) -> dict[str, Any]:
+    """Convert one input record to the standard baseline column layout.
+
+    Discard unrecognized columns, normalize recognized values to text, and
+    fill missing standard fields with empty strings, including ERP Category.
+    """
     canonical: dict[str, Any] = {}
     for header, value in raw.items():
         mapped = normalize_header(header)
@@ -51,6 +61,13 @@ def _canonicalize_row(raw: dict[str, Any]) -> dict[str, Any]:
 
 
 def _find_xlsx_source(path: Path, preferred_sheet: str | None) -> tuple[str, int, list[str]]:
+    """Find the most likely header row within the first ten rows of a workbook.
+
+    Search only preferred_sheet when it exists; otherwise search every sheet.
+    Score recognized headings, with extra weight for Logon Name. Return the
+    sheet name, one-based header row, and normalized headings. Full required
+    column validation happens later in load_roster().
+    """
     workbook = load_workbook(path, read_only=True, data_only=True)
     try:
         candidates: list[tuple[int, str, int, list[str]]] = []
@@ -62,6 +79,8 @@ def _find_xlsx_source(path: Path, preferred_sheet: str | None) -> tuple[str, int
                 start=1,
             ):
                 headers = [normalize_header(value) for value in row]
+                # Some exports have title rows above their table; score likely
+                # headers rather than assuming row 1 always contains headings.
                 score = sum(header in CORE_HEADERS for header in headers)
                 if KEY_HEADER in headers:
                     score += 5
@@ -80,6 +99,23 @@ def _find_xlsx_source(path: Path, preferred_sheet: str | None) -> tuple[str, int
 
 
 def load_roster(path: str | Path, preferred_sheet: str | None = None) -> LoadedRoster:
+    """Read a CSV, XLSX, or XLSM file into a validated LoadedRoster.
+
+    Args:
+        path: Input employee file; expanded and resolved to an absolute path.
+        preferred_sheet: Excel sheet to prioritize when present; ignored for CSV.
+
+    Returns:
+        Canonical employee rows, source metadata, and a SHA-256 fingerprint.
+
+    Raises:
+        RosterError: Missing file, unsupported type, missing required headings,
+            empty employee data, or duplicate employee keys. Underlying file
+            and workbook errors may also propagate to the caller.
+
+    Rows with blank Logon Name values are skipped. Excel formulas are read
+    using their cached values; this function does not calculate formulas.
+    """
     source = Path(path).expanduser().resolve()
     if not source.exists():
         raise RosterError(f"File not found: {source}")
@@ -90,6 +126,7 @@ def load_roster(path: str | Path, preferred_sheet: str | None = None) -> LoadedR
     sheet_name = "CSV"
 
     if suffix == ".csv":
+        # utf-8-sig accepts Excel-exported CSVs with a byte-order mark (BOM).
         with source.open("r", encoding="utf-8-sig", newline="") as handle:
             reader = csv.DictReader(handle)
             if not reader.fieldnames:
@@ -102,6 +139,7 @@ def load_roster(path: str | Path, preferred_sheet: str | None = None) -> LoadedR
                 )
             for raw in reader:
                 row = _canonicalize_row(raw)
+                # Ignore blank/formatting-only rows that cannot identify an employee.
                 if normalize_key(row[KEY_HEADER]):
                     rows.append(row)
     elif suffix in {".xlsx", ".xlsm"}:
@@ -123,6 +161,7 @@ def load_roster(path: str | Path, preferred_sheet: str | None = None) -> LoadedR
                     if raw_headers[index] is not None
                 }
                 row = _canonicalize_row(raw)
+                # Ignore blank/formatting-only rows that cannot identify an employee.
                 if normalize_key(row[KEY_HEADER]):
                     rows.append(row)
         finally:

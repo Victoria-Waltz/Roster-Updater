@@ -31,6 +31,19 @@ from .utils import clean, normalize_key
 
 
 def write_report(path: str | Path, result: ComparisonResult) -> Path:
+    """Export a comparison to Summary, Review, Changes, and Updated Roster sheets.
+
+    Args:
+        path: Destination XLSX filename; parent directories are created.
+        result: Completed in-memory comparison, including saved corrections
+            that were present when the comparison ran.
+
+    Returns:
+        The output Path after saving through a temporary file and replacement.
+
+    Colors identify review categories and capability sources. Exporting does
+    not change the shared baseline or mark any review item as approved.
+    """
     output = Path(path)
     output.parent.mkdir(parents=True, exist_ok=True)
     workbook = Workbook()
@@ -40,6 +53,7 @@ def write_report(path: str | Path, result: ComparisonResult) -> Path:
     changes_sheet = workbook.create_sheet("Changes")
     roster_sheet = workbook.create_sheet("Updated Roster")
 
+    # Summary: overall metrics plus capability/department counts for quick review.
     summary_sheet.sheet_view.showGridLines = False
     summary_sheet["A2"] = "Monthly employee roster update"
     summary_sheet["A2"].font = Font(name="Arial", size=15, bold=True, color=NAVY)
@@ -95,6 +109,8 @@ def write_report(path: str | Path, result: ComparisonResult) -> Path:
     summary_sheet.column_dimensions["G"].width = 28
     summary_sheet.column_dimensions["H"].width = 12
 
+    # Review: one row per finding, including suggested capabilities and hierarchy.
+    # Keep this order aligned with ReviewItem.as_row() in models.py.
     review_headers = [
         "Logon Name",
         "Display Name",
@@ -140,6 +156,8 @@ def write_report(path: str | Path, result: ComparisonResult) -> Path:
         review_sheet.cell(row_number, 11).alignment = Alignment(vertical="top", wrap_text=True)
         review_sheet.row_dimensions[row_number].height = 32
 
+    # Changes: source field differences, separate from the corrected proposed roster.
+    # Keep this order aligned with FieldChange.as_row().
     change_headers = ["Logon Name", "Display Name", "Field", "Old Value", "New Value"]
     changes_sheet["A2"] = "Employee information changes"
     changes_sheet["A2"].font = Font(name="Arial", size=15, bold=True, color=NAVY)
@@ -152,6 +170,7 @@ def write_report(path: str | Path, result: ComparisonResult) -> Path:
         changes_sheet.add_table(table)
     _fit_columns(changes_sheet, maximum=44)
 
+    # Updated Roster: the proposed active employees plus capability provenance.
     roster_headers = BASELINE_HEADERS + ["Capability Source"]
     _write_rows(roster_sheet, 1, [roster_headers])
     roster_rows = []
@@ -177,6 +196,7 @@ def write_report(path: str | Path, result: ComparisonResult) -> Path:
                 capability_cell.fill = PatternFill("solid", fgColor=LIGHT_RED)
     _fit_columns(roster_sheet, maximum=36)
 
+    # Fit printed sheets to one page wide while allowing multiple pages vertically.
     for worksheet in workbook.worksheets:
         worksheet.sheet_properties.pageSetUpPr.fitToPage = True
         worksheet.page_setup.fitToWidth = 1
@@ -195,6 +215,13 @@ def create_report_from_files(
     report_path: str | Path,
     overrides_path: str | Path | None = None,
 ) -> ComparisonResult:
+    """Load two employee files, compare them, and save an Excel report.
+
+    Use this convenience function from scripts that do not need the desktop
+    window or SharedRosterStore. overrides_path optionally supplies saved
+    corrections. Return the ComparisonResult for further inspection; this
+    function does not approve or replace a shared baseline.
+    """
     baseline = load_roster(baseline_path, preferred_sheet="All_Users_Active_Info (1)")
     monthly = load_roster(monthly_path)
     overrides = load_overrides(Path(overrides_path)) if overrides_path else {}
