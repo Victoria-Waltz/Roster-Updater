@@ -16,7 +16,12 @@ from scripts.make_sample_data import row, write
 
 
 class RosterWorkflowTests(unittest.TestCase):
+    """Exercise the public monthly workflow with synthetic files and isolated storage."""
     def setUp(self):
+        """Create a temporary baseline, monthly pull, and shared folder for each test.
+
+        Register cleanup immediately so temporary files are removed even on failure.
+        """
         self.temp = TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
@@ -35,6 +40,7 @@ class RosterWorkflowTests(unittest.TestCase):
         self.store.initialize(self.baseline)
 
     def test_comparison_preserves_capability_and_flags_changes(self):
+        """Check carry-forward, retained ERP data, new/departed counts, and unapplied suggestions."""
         result = self.store.compare(self.monthly)
         self.assertEqual(result.summary['New employees'], 1)
         self.assertEqual(result.summary['Missing from new pull'], 1)
@@ -46,6 +52,7 @@ class RosterWorkflowTests(unittest.TestCase):
         self.assertTrue(any(change.field_name == 'Title' for change in result.changes))
 
     def test_correction_is_persisted_and_can_be_removed(self):
+        """Reopen storage to prove corrections survive in JSON and removal restores fallback."""
         self.store.save_override('DANA', 'Make', 'Slack/manual', 'Approved')
         reopened = SharedRosterStore(self.store.root)
         result = reopened.compare(self.monthly)
@@ -55,6 +62,7 @@ class RosterWorkflowTests(unittest.TestCase):
         self.assertEqual(reopened.compare(self.monthly).updated_roster[1]['Capability'], '')
 
     def test_approval_creates_report_backup_and_audit(self):
+        """Verify approval promotes rows and produces the expected backup, report, and audit entry."""
         result = self.store.compare(self.monthly)
         report, backup = self.store.approve(result)
         self.assertTrue(report.exists())
@@ -71,12 +79,14 @@ class RosterWorkflowTests(unittest.TestCase):
         self.assertEqual(workbook['Updated Roster']['P1'].value, 'Capability Source')
 
     def test_stale_comparison_cannot_replace_new_baseline(self):
+        """Ensure a result based on an older baseline cannot be approved again after promotion."""
         result = self.store.compare(self.monthly)
         self.store.approve(result)
         with self.assertRaisesRegex(RosterError, 'baseline changed'):
             self.store.approve(result)
 
     def test_lock_blocks_concurrent_updates_and_is_released(self):
+        """Verify an existing lock blocks a second writer and is removed on normal exit."""
         with shared_lock(self.store.lock_path, 'Test'):
             with self.assertRaisesRegex(RosterError, 'Another user'):
                 with shared_lock(self.store.lock_path, 'Conflicting update'):
@@ -84,6 +94,7 @@ class RosterWorkflowTests(unittest.TestCase):
         self.assertFalse(self.store.lock_path.exists())
 
     def test_csv_loading_and_duplicate_validation(self):
+        """Accept a valid CSV and reject it after a duplicate employee key is appended."""
         source = self.root / 'monthly.csv'
         with source.open('w', newline='', encoding='utf-8-sig') as handle:
             writer = csv.DictWriter(handle, fieldnames=CORE_HEADERS, extrasaction='ignore')
@@ -96,6 +107,7 @@ class RosterWorkflowTests(unittest.TestCase):
             load_roster(source)
 
     def test_file_report_api_and_legacy_imports(self):
+        """Check old imports still resolve to the organized implementation and export a report."""
         self.assertIs(roster_engine.SharedRosterStore, SharedRosterStore)
         self.assertIs(roster_engine.create_report_from_files, create_report_from_files)
         report = self.root / 'export.xlsx'
@@ -104,6 +116,7 @@ class RosterWorkflowTests(unittest.TestCase):
         self.assertEqual(len(result.updated_roster), 2)
 
     def test_desktop_entry_point_imports_without_starting_window(self):
+        """Import the desktop entry point without launching Tkinter or needing a display."""
         import roster_app
         from roster_updater.ui.app import RosterUpdaterApp
         from roster_updater.ui.view import RosterView

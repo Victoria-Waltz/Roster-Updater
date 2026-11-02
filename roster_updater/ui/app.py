@@ -20,12 +20,20 @@ from .view import APP_NAME, RosterView
 
 
 class RosterUpdaterApp(RosterView):
+    """Coordinate user actions between the desktop widgets and roster services.
+
+    self.store points to the shared data folder; self.result is the latest
+    in-memory comparison. Local config remembers the folder between sessions.
+    """
     def __init__(self) -> None:
+        """Initialize window state, build the view, and restore the last shared folder."""
         super().__init__()
         self.title(APP_NAME)
         self.geometry("1280x820")
         self.minsize(1050, 680)
 
+        # Local preferences remember where shared data lives; employee data
+        # is read through SharedRosterStore, not stored in this config.
         self.config_store = ConfigStore()
         self.config_data = self.config_store.load()
         self.store: SharedRosterStore | None = None
@@ -45,6 +53,7 @@ class RosterUpdaterApp(RosterView):
             "Manager issues": tk.StringVar(value="—"),
         }
 
+        # Create state variables before widgets bind to those variables.
         self._configure_styles()
         self._build_ui()
 
@@ -52,11 +61,13 @@ class RosterUpdaterApp(RosterView):
             self._set_shared_folder(Path(self.shared_folder_var.get()), save=False)
 
     def choose_shared_folder(self) -> None:
+        """Ask for a shared data directory; cancellation leaves the selection alone."""
         selected = filedialog.askdirectory(title="Choose the shared roster folder")
         if selected:
             self._set_shared_folder(Path(selected), save=True)
 
     def _set_shared_folder(self, folder: Path, save: bool) -> None:
+        """Create a store for folder, optionally remember it, and refresh baseline status."""
         self.store = SharedRosterStore(folder)
         self.store.prepare()
         self.shared_folder_var.set(str(folder))
@@ -66,6 +77,7 @@ class RosterUpdaterApp(RosterView):
         self.refresh_baseline_status()
 
     def refresh_baseline_status(self) -> None:
+        """Display baseline availability, employee count, and last modification time."""
         if not self.store:
             self.baseline_status_var.set("Choose the shared roster folder.")
             return
@@ -81,6 +93,10 @@ class RosterUpdaterApp(RosterView):
             self.baseline_status_var.set(str(exc))
 
     def initialize_baseline(self) -> None:
+        """Ask for an approved roster and confirm replacement of an existing baseline.
+
+        Delegate backup/import to the store and report errors in the window.
+        """
         if not self.store:
             messagebox.showinfo("Choose a folder", "Choose the shared roster folder first.")
             return
@@ -106,6 +122,7 @@ class RosterUpdaterApp(RosterView):
             self._set_busy(False)
 
     def choose_monthly_pull(self) -> None:
+        """Select a supported input file without running a comparison yet."""
         selected = filedialog.askopenfilename(
             title="Choose Sven's new employee pull",
             filetypes=[("Employee files", "*.xlsx *.xlsm *.csv"), ("Excel files", "*.xlsx *.xlsm"), ("CSV files", "*.csv")],
@@ -115,6 +132,11 @@ class RosterUpdaterApp(RosterView):
             self.status_var.set("New pull selected. Click Run update.")
 
     def run_update(self) -> None:
+        """Validate setup, compare the selected pull, and refresh displayed findings.
+
+        Prompt for a file if necessary. On failure, discard self.result and show
+        the error; always restore the action buttons after the attempt.
+        """
         if not self.store:
             messagebox.showinfo("Choose a folder", "Choose the shared roster folder first.")
             return
@@ -129,6 +151,7 @@ class RosterUpdaterApp(RosterView):
                 return
         try:
             self._set_busy(True, "Comparing the new pull with the shared baseline...")
+            # Comparing produces an in-memory proposal. Approval is a separate action.
             self.result = self.store.compare(source)
             self._display_result()
             self.status_var.set(
@@ -141,6 +164,7 @@ class RosterUpdaterApp(RosterView):
             self._set_busy(False)
 
     def _current_employee_capability(self, logon_name: str) -> str:
+        """Find the proposed capability for a logon name, or return blank if unavailable."""
         if not self.result:
             return ""
         key = normalize_key(logon_name)
@@ -150,6 +174,11 @@ class RosterUpdaterApp(RosterView):
         return ""
 
     def edit_capability(self) -> None:
+        """Open the correction dialog for the selected active employee.
+
+        The nested save callback persists the correction and reruns comparison so
+        all affected findings and manager suggestions reflect the saved value.
+        """
         if not self.store or not self.result:
             messagebox.showinfo("Run an update", "Run the monthly update before editing capabilities.")
             return
@@ -161,6 +190,7 @@ class RosterUpdaterApp(RosterView):
             return
 
         def save(capability: str, source: str, notes: str) -> None:
+            """Save the dialog values, recompute findings, and display any processing error."""
             try:
                 self.store.save_override(item.logon_name, capability, source, notes)
                 self.run_update()
@@ -178,6 +208,7 @@ class RosterUpdaterApp(RosterView):
         )
 
     def apply_suggestion(self) -> None:
+        """Confirm and save a selected manager suggestion, then rerun the comparison."""
         if not self.store or not self.result:
             messagebox.showinfo("Run an update", "Run the monthly update first.")
             return
@@ -205,6 +236,7 @@ class RosterUpdaterApp(RosterView):
             self._show_error(exc)
 
     def export_report(self) -> None:
+        """Ask for an XLSX destination and export the latest result without approving it."""
         if not self.result:
             messagebox.showinfo("Run an update", "Run the monthly update before exporting the report.")
             return
@@ -228,6 +260,11 @@ class RosterUpdaterApp(RosterView):
             self._set_busy(False)
 
     def approve_month(self) -> None:
+        """Confirm approval, warn about unresolved findings, and delegate persistence.
+
+        After success, clear the pending result and selected monthly file. The
+        store performs the stale-baseline check before replacing shared data.
+        """
         if not self.store or not self.result:
             messagebox.showinfo("Run an update", "Run the monthly update before approving it.")
             return
@@ -255,6 +292,7 @@ class RosterUpdaterApp(RosterView):
             self._set_busy(False)
 
     def open_shared_folder(self) -> None:
+        """Open the selected data folder using the platform-specific file-opening route."""
         if not self.store:
             messagebox.showinfo("Choose a folder", "Choose the shared roster folder first.")
             return
@@ -270,6 +308,7 @@ class RosterUpdaterApp(RosterView):
             self._show_error(exc)
 
     def _show_error(self, error: Exception) -> None:
+        """Show expected roster errors directly and add context to unexpected errors."""
         message = str(error)
         if not isinstance(error, RosterError):
             message = f"The app could not complete that step.\n\n{message}"
@@ -278,5 +317,6 @@ class RosterUpdaterApp(RosterView):
 
 
 def main() -> None:
+    """Construct the desktop application and start Tkinter's event loop."""
     app = RosterUpdaterApp()
     app.mainloop()

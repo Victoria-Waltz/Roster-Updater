@@ -9,6 +9,12 @@ from .utils import clean, normalize_key
 
 
 def load_overrides(path: Path) -> dict[str, dict[str, str]]:
+    """Read approved capability corrections keyed by normalized logon name.
+
+    A missing file means no corrections yet. Invalid JSON or a non-object
+    top level raises RosterError. Non-object entries and empty keys are
+    ignored; recognized fields are converted to trimmed text.
+    """
     if not path.exists():
         return {}
     try:

@@ -6,6 +6,10 @@ import tkinter as tk
 
 
 class CapabilityDialog(tk.Toplevel):
+    """Modal editor that collects a capability, source, and optional notes.
+
+    The on_save callback performs persistence; this dialog owns only input UI.
+    """
     def __init__(
         self,
         parent: tk.Misc,
@@ -15,6 +19,11 @@ class CapabilityDialog(tk.Toplevel):
         suggested: str,
         on_save,
     ) -> None:
+        """Build and center the editor, prefilling a suggestion when one is available.
+
+        on_save receives (capability, source, notes) when Save or Enter is used.
+        Prefilling a suggestion does not itself save or approve anything.
+        """
         super().__init__(parent)
         self.title("Capability correction")
         self.resizable(False, False)
@@ -72,6 +81,7 @@ class CapabilityDialog(tk.Toplevel):
         self.geometry(f"+{x}+{y}")
 
     def save(self) -> None:
+        """Require a nonblank capability, invoke the save callback, then close the dialog."""
         capability = self.capability_var.get().strip()
         if not capability:
             messagebox.showerror("Capability required", "Enter the approved capability.", parent=self)

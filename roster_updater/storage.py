@@ -23,10 +23,21 @@ from .utils import clean, file_sha256, normalize_key
 
 @contextmanager
 def shared_lock(path: Path, purpose: str, timeout_seconds: int = 0) -> Iterator[None]:
+    """Hold an exclusive lock file while a shared-folder write is in progress.
+
+    Use with shared_lock(...): around operations that must not overlap.
+    A zero timeout fails immediately if the file exists; positive timeouts
+    retry every quarter second. The lock is removed when the protected block
+    exits, including on an exception. A process crash may leave a stale file.
+    This relies on exclusive file creation on the same filesystem; independent
+    local copies in sync folders do not provide a distributed lock.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
     while True:
         try:
+            # Exclusive creation makes checking and acquiring the lock one
+            # filesystem operation, avoiding a check-then-create race.
             descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
             with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
                 json.dump(
@@ -46,6 +57,7 @@ def shared_lock(path: Path, purpose: str, timeout_seconds: int = 0) -> Iterator[
             time.sleep(0.25)
     try:
         yield
+    # Release after the protected operation even if it raises an exception.
     finally:
         try:
             path.unlink()
@@ -54,7 +66,17 @@ def shared_lock(path: Path, purpose: str, timeout_seconds: int = 0) -> Iterator[
 
 
 class SharedRosterStore:
+    """Own the paths and file operations for one shared roster folder.
+
+    The baseline is the approved roster; corrections persist independently.
+    History retains backups/source pulls, reports retains approved reports,
+    and the audit CSV records approvals. Constructing a store does not write.
+    """
     def __init__(self, root: str | Path):
+        """Resolve the shared folder and derive the standard data paths.
+
+        root is the user-selected data folder, not the application source folder.
+        """
         self.root = Path(root).expanduser().resolve()
         self.baseline_path = self.root / "current_baseline.xlsx"
         self.overrides_path = self.root / "capability_corrections.json"
@@ -64,19 +86,27 @@ class SharedRosterStore:
         self.audit_path = self.root / "approval_history.csv"
 
     def prepare(self) -> None:
+        """Create the shared root, history, and reports directories if needed."""
         self.root.mkdir(parents=True, exist_ok=True)
         self.history_dir.mkdir(parents=True, exist_ok=True)
         self.reports_dir.mkdir(parents=True, exist_ok=True)
 
     def has_baseline(self) -> bool:
+        """Check whether the baseline path exists without loading or validating it."""
         return self.baseline_path.exists()
 
     def load_baseline(self) -> LoadedRoster:
+        """Load the current approved workbook, or explain that setup is still needed."""
         if not self.has_baseline():
             raise RosterError("The shared folder has not been initialized with a baseline yet.")
         return load_roster(self.baseline_path, preferred_sheet="Current Baseline")
 
     def initialize(self, baseline_source: str | Path) -> LoadedRoster:
+        """Import an approved source as the shared baseline and return the saved roster.
+
+        Validate the source first. Under the shared lock, back up an existing
+        baseline before replacing it. Existing capability corrections are retained.
+        """
         self.prepare()
         source = load_roster(baseline_source, preferred_sheet="All_Users_Active_Info (1)")
         with shared_lock(self.lock_path, "Initialize baseline"):
@@ -87,6 +117,7 @@ class SharedRosterStore:
         return self.load_baseline()
 
     def load_overrides(self) -> dict[str, dict[str, str]]:
+        """Load capability corrections from this store's JSON file."""
         return load_overrides(self.overrides_path)
 
     def save_override(
@@ -96,6 +127,12 @@ class SharedRosterStore:
         source: str,
         notes: str = "",
     ) -> None:
+        """Persist one approved capability correction with its source and audit details.
+
+        Require nonblank employee key and capability. Under the lock, reload all
+        corrections before updating one entry so unrelated entries are preserved.
+        This changes the corrections file, not the baseline workbook.
+        """
         key = normalize_key(logon_name)
         if not key:
             raise RosterError("A Logon Name is required to save a capability correction.")
@@ -103,6 +140,8 @@ class SharedRosterStore:
             raise RosterError("Enter a capability before saving the correction.")
         self.prepare()
         with shared_lock(self.lock_path, "Save capability correction", timeout_seconds=3):
+            # Reload inside the lock so another writer's saved corrections
+            # are not lost when this employee's entry is changed.
             overrides = self.load_overrides()
             overrides[key] = {
                 "capability": clean(capability),
@@ -116,9 +155,15 @@ class SharedRosterStore:
             os.replace(temp_path, self.overrides_path)
 
     def remove_override(self, logon_name: str) -> None:
+        """Remove a saved correction if present, leaving other corrections intact.
+
+        Future comparisons fall back to monthly or baseline values for this key.
+        """
         key = normalize_key(logon_name)
         self.prepare()
         with shared_lock(self.lock_path, "Remove capability correction", timeout_seconds=3):
+            # Reload inside the lock so another writer's saved corrections
+            # are not lost when this employee's entry is changed.
             overrides = self.load_overrides()
             if key in overrides:
                 overrides.pop(key)
@@ -127,15 +172,30 @@ class SharedRosterStore:
                 os.replace(temp_path, self.overrides_path)
 
     def compare(self, monthly_path: str | Path) -> ComparisonResult:
+        """Load the current baseline, monthly file, and corrections into a proposal.
+
+        No approval or file writes occur; the UI can review or export the result.
+        """
         baseline = self.load_baseline()
         monthly = load_roster(monthly_path)
         return compare_rosters(baseline, monthly, self.load_overrides())
 
     def approve(self, result: ComparisonResult) -> tuple[Path, Path]:
+        """Promote a comparison to the shared baseline and return report/backup paths.
+
+        Under the shared lock, reject a result if its baseline hash is stale.
+        Then copy the old baseline and source pull, save a report, replace the
+        baseline, and append an audit row. This sequence is not a multi-file
+        transaction: a later failure does not roll back earlier completed writes.
+        The UI handles confirmation and unresolved-item warnings; this method
+        does not reject a result solely because it has unresolved review items.
+        """
         self.prepare()
         with shared_lock(self.lock_path, "Approve monthly baseline"):
             if not self.baseline_path.exists():
                 raise RosterError("The shared baseline no longer exists. Run the comparison again.")
+            # A user may have left the review window open while someone else
+            # approved a newer baseline. Reject that stale proposal.
             current_hash = file_sha256(self.baseline_path)
             if current_hash != result.baseline.file_hash:
                 raise RosterError(
@@ -147,12 +207,15 @@ class SharedRosterStore:
             backup_path = self.history_dir / f"baseline_{timestamp}.xlsx"
             source_copy = self.history_dir / f"source_pull_{timestamp}{result.monthly_pull.source_path.suffix.lower()}"
             report_path = self.reports_dir / f"roster_update_{timestamp}.xlsx"
+            # Preserve the previous baseline and the input pull before promotion.
+            # Each step can fail independently; this is not an all-or-nothing transaction.
             shutil.copy2(self.baseline_path, backup_path)
             shutil.copy2(result.monthly_pull.source_path, source_copy)
             write_report(report_path, result)
             write_baseline(self.baseline_path, result.updated_roster)
 
             new_hash = file_sha256(self.baseline_path)
+            # Append one audit entry per approval; write headings only for a new log.
             is_new = not self.audit_path.exists()
             with self.audit_path.open("a", encoding="utf-8", newline="") as handle:
                 writer = csv.writer(handle)

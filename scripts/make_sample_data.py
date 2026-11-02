@@ -1,3 +1,4 @@
+"""Generate fictional workbooks for demos without using employee data."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -19,6 +20,7 @@ def row(
     manager_email,
     erp_category="",
 ):
+    """Build one synthetic employee record using the same headings as real inputs."""
     first, *last = display_name.split()
     return {
         "S.No.": number,
@@ -40,6 +42,7 @@ def row(
 
 
 def write(path: Path, sheet_name: str, headers, rows):
+    """Write synthetic rows to a named worksheet using the supplied column order."""
     workbook = Workbook()
     worksheet = workbook.active
     worksheet.title = sheet_name
@@ -51,6 +54,12 @@ def write(path: Path, sheet_name: str, headers, rows):
 
 
 def main():
+    """Create sample baseline/monthly workbooks under the repository sample_data folder.
+
+    The fictional records demonstrate a title change, departure, new employees,
+    missing capabilities, and an inactive-manager review item. Existing sample
+    workbooks with the same names are overwritten.
+    """
     output = Path(__file__).resolve().parents[1] / "sample_data"
     output.mkdir(exist_ok=True)
     baseline = [

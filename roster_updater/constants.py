@@ -4,6 +4,7 @@ from __future__ import annotations
 
 
 
+# Every monthly input must include these headings after alias normalization.
 CORE_HEADERS = [
     "S.No.",
     "Display Name",
@@ -22,6 +23,7 @@ CORE_HEADERS = [
 ]
 
 
+# The approved roster has one extra field retained across monthly updates.
 BASELINE_HEADERS = CORE_HEADERS + ["ERP Category"]
 
 
@@ -34,6 +36,7 @@ CAPABILITY_HEADER = "Capability"
 ERP_HEADER = "ERP Category"
 
 
+# Ignore spreadsheet row numbering; compare meaningful employee attributes.
 COMPARE_FIELDS = [
     "Display Name",
     "First Name",
@@ -50,6 +53,7 @@ COMPARE_FIELDS = [
 ]
 
 
+# Keys have already had case, spaces, and punctuation removed by normalize_header().
 HEADER_ALIASES = {
     "sno": "S.No.",
     "serialnumber": "S.No.",

@@ -47,12 +47,22 @@ THIN_GRAY = Side(style="thin", color="D9E1F2")
 
 
 def _safe_cell_value(value: Any) -> Any:
+    """Prefix formula-like text with an apostrophe before placing it in Excel.
+
+    Strings starting with =, +, -, or @ are treated as literal text by this
+    writer. Numeric values are left unchanged.
+    """
     if isinstance(value, str) and value.startswith(("=", "+", "-", "@")):
         return "'" + value
     return value
 
 
 def _write_rows(worksheet, start_row: int, rows: Iterable[Iterable[Any]]) -> int:
+    """Write values starting at a one-based row and return the last row written.
+
+    Each value goes through _safe_cell_value(). For no input rows, return
+    start_row - 1 so callers can handle an empty table without inventing data.
+    """
     current = start_row
     for values in rows:
         for column, value in enumerate(values, start=1):
@@ -62,6 +72,11 @@ def _write_rows(worksheet, start_row: int, rows: Iterable[Iterable[Any]]) -> int
 
 
 def _style_table_sheet(worksheet, header_row: int, last_row: int, last_column: int) -> None:
+    """Apply shared heading/body styles, freeze panes, and an Excel filter.
+
+    Coordinates are one-based. This formats a worksheet region; callers add
+    structured Excel Table objects separately when data rows exist.
+    """
     for cell in worksheet[header_row]:
         if cell.column <= last_column:
             cell.fill = PatternFill("solid", fgColor=NAVY)
@@ -78,6 +93,7 @@ def _style_table_sheet(worksheet, header_row: int, last_row: int, last_column: i
 
 
 def _column_letter(column: int) -> str:
+    """Convert a positive one-based column number to Excel letters (1=A, 27=AA)."""
     result = ""
     while column:
         column, remainder = divmod(column - 1, 26)
@@ -86,6 +102,11 @@ def _column_letter(column: int) -> str:
 
 
 def _fit_columns(worksheet, minimum: int = 11, maximum: int = 34) -> None:
+    """Estimate column widths from up to 400 cells per column.
+
+    Clamp widths between minimum and maximum so long notes do not make the
+    workbook difficult to navigate. This is a text-length estimate, not autofit.
+    """
     for column_cells in worksheet.columns:
         letter = _column_letter(column_cells[0].column)
         length = 0
@@ -95,6 +116,12 @@ def _fit_columns(worksheet, minimum: int = 11, maximum: int = 34) -> None:
 
 
 def write_baseline(path: str | Path, rows: list[dict[str, Any]]) -> Path:
+    """Save canonical employee rows to a Current Baseline worksheet.
+
+    Create parent folders, apply standard formatting, and return the output
+    Path. Save a temporary workbook beside the destination, then replace the
+    destination so readers do not observe a partially written workbook.
+    """
     output = Path(path)
     output.parent.mkdir(parents=True, exist_ok=True)
     workbook = Workbook()
@@ -108,6 +135,7 @@ def write_baseline(path: str | Path, rows: list[dict[str, Any]]) -> Path:
     )
     _style_table_sheet(worksheet, 1, last_row, len(BASELINE_HEADERS))
     _fit_columns(worksheet)
+    # Excel structured tables need data rows; an empty roster keeps headings only.
     if last_row >= 2:
         table = Table(displayName="CurrentBaselineTable", ref=f"A1:O{last_row}")
         table.tableStyleInfo = TableStyleInfo(
@@ -118,6 +146,7 @@ def write_baseline(path: str | Path, rows: list[dict[str, Any]]) -> Path:
             showColumnStripes=False,
         )
         worksheet.add_table(table)
+    # Save beside the destination, then replace it after workbook creation succeeds.
     temp_path = output.with_suffix(output.suffix + ".tmp")
     workbook.save(temp_path)
     os.replace(temp_path, output)

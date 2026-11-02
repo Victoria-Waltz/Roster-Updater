@@ -12,7 +12,13 @@ APP_NAME = "TAIT Roster Updater"
 
 
 class RosterView(tk.Tk):
+    """Presentation methods inherited by RosterUpdaterApp.
+
+    The application initializes state and supplies button callbacks. This
+    class builds widgets and renders results; it does not persist roster data.
+    """
     def _configure_styles(self) -> None:
+        """Register reusable Tkinter styles and choose a platform-appropriate theme."""
         style = ttk.Style(self)
         try:
             style.theme_use("vista" if os.name == "nt" else "clam")
@@ -31,6 +37,10 @@ class RosterView(tk.Tk):
         style.configure("Treeview.Heading", font=("Arial", 9, "bold"))
 
     def _build_ui(self) -> None:
+        """Build setup controls, file selection, summary cards, review table, and actions.
+
+        Button commands refer to application methods; they run only when clicked.
+        """
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
 
@@ -46,6 +56,7 @@ class RosterView(tk.Tk):
             style="Muted.TLabel",
         ).grid(row=1, column=0, sticky="w", pady=(2, 16))
 
+        # Shared setup identifies the official baseline used by everyone.
         setup = ttk.LabelFrame(main, text="Shared roster setup", padding=12)
         setup.grid(row=2, column=0, sticky="ew")
         setup.columnconfigure(1, weight=1)
@@ -57,6 +68,7 @@ class RosterView(tk.Tk):
             row=1, column=1, columnspan=3, sticky="w", pady=(7, 0)
         )
 
+        # Monthly input is separate from the approved baseline.
         update = ttk.LabelFrame(main, text="Monthly update", padding=12)
         update.grid(row=3, column=0, sticky="ew", pady=(12, 0))
         update.columnconfigure(1, weight=1)
@@ -66,6 +78,7 @@ class RosterView(tk.Tk):
         self.run_button = ttk.Button(update, text="Run update", style="Primary.TButton", command=self.run_update)
         self.run_button.grid(row=0, column=3, padx=(8, 0))
 
+        # Each StringVar updates a summary label when comparison finishes.
         summary = ttk.Frame(main)
         summary.grid(row=4, column=0, sticky="ew", pady=(14, 12))
         for column in range(len(self.summary_vars)):
@@ -81,6 +94,8 @@ class RosterView(tk.Tk):
         review_frame.columnconfigure(0, weight=1)
         review_frame.rowconfigure(0, weight=1)
 
+        # Treeview columns show a subset of ReviewItem; review_by_iid retains
+        # the full object for editing and applying suggestions.
         columns = ("employee", "logon", "issue", "current", "suggested", "manager", "changed")
         self.review_tree = ttk.Treeview(review_frame, columns=columns, show="headings", selectmode="browse")
         headings = {
@@ -110,6 +125,7 @@ class RosterView(tk.Tk):
         vertical.grid(row=0, column=1, sticky="ns")
         horizontal.grid(row=1, column=0, sticky="ew")
 
+        # The controller supplies these callbacks through inheritance.
         actions = ttk.Frame(main)
         actions.grid(row=6, column=0, sticky="ew", pady=(12, 0))
         ttk.Button(actions, text="Edit capability", command=self.edit_capability).pack(side="left")
@@ -124,6 +140,11 @@ class RosterView(tk.Tk):
         status.grid(row=7, column=0, sticky="w", pady=(8, 0))
 
     def _set_busy(self, busy: bool, message: str = "") -> None:
+        """Toggle the main action buttons/cursor and optionally update status text.
+
+        update_idletasks() repaints pending UI work; processing still runs on the
+        GUI thread, so this is visual feedback rather than background execution.
+        """
         self.run_button.configure(state="disabled" if busy else "normal")
         self.export_button.configure(state="disabled" if busy else "normal")
         self.approve_button.configure(state="disabled" if busy else "normal")
@@ -133,6 +154,11 @@ class RosterView(tk.Tk):
         self.update_idletasks()
 
     def _display_result(self) -> None:
+        """Replace displayed counts and review rows from self.result.
+
+        Map each widget row ID to its ReviewItem so selection can retrieve the
+        full finding, including values not shown in the table.
+        """
         if not self.result:
             return
         for name, variable in self.summary_vars.items():
@@ -171,6 +197,7 @@ class RosterView(tk.Tk):
             self.review_by_iid[item_id] = item
 
     def _selected_review_item(self) -> ReviewItem | None:
+        """Return the selected finding, or show a selection prompt and return None."""
         selected = self.review_tree.selection()
         if not selected:
             messagebox.showinfo("Select an employee", "Select an employee in the review list first.")

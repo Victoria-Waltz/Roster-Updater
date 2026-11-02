@@ -2,6 +2,8 @@
 
 ## Code organization
 
+New to the code? Read the [code walkthrough](docs/CODE_WALKTHROUGH.md) for terminology, a complete monthly-update example, and guidance on where to make changes. Python docstrings explain the functions and classes; inline comments explain the key processing decisions.
+
 Application code lives in `roster_updater/`, with desktop interface code in `roster_updater/ui/`, development tools in `scripts/`, and regression tests in `tests/`. See [the project structure guide](docs/PROJECT_STRUCTURE.md) for a file-by-file map and development commands. The existing Windows launch and build scripts still work from the repository root.
 
 This is a local Python application for comparing Sven's monthly active-user file with the approved employee baseline. Employee data stays in the folder selected by the user. The application does not upload data to an external service.
