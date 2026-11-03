@@ -128,7 +128,7 @@ def write_report(path: str | Path, result: ComparisonResult) -> Path:
     review_sheet["A2"].font = Font(name="Arial", size=15, bold=True, color=NAVY)
     _write_rows(review_sheet, 4, [review_headers])
     last_review_row = _write_rows(review_sheet, 5, (item.as_row() for item in result.review_items))
-    _style_table_sheet(review_sheet, 4, last_review_row, len(review_headers))
+    _style_table_sheet(review_sheet, 4, last_review_row, len(review_headers), add_filter=False)
     if last_review_row >= 5:
         table = Table(displayName="ReviewItemsTable", ref=f"A4:K{last_review_row}")
         table.tableStyleInfo = TableStyleInfo(name="TableStyleMedium2", showRowStripes=True)
@@ -163,7 +163,7 @@ def write_report(path: str | Path, result: ComparisonResult) -> Path:
     changes_sheet["A2"].font = Font(name="Arial", size=15, bold=True, color=NAVY)
     _write_rows(changes_sheet, 4, [change_headers])
     last_change_row = _write_rows(changes_sheet, 5, (item.as_row() for item in result.changes))
-    _style_table_sheet(changes_sheet, 4, last_change_row, len(change_headers))
+    _style_table_sheet(changes_sheet, 4, last_change_row, len(change_headers), add_filter=False)
     if last_change_row >= 5:
         table = Table(displayName="EmployeeChangesTable", ref=f"A4:E{last_change_row}")
         table.tableStyleInfo = TableStyleInfo(name="TableStyleMedium2", showRowStripes=True)
@@ -178,7 +178,7 @@ def write_report(path: str | Path, result: ComparisonResult) -> Path:
         key = normalize_key(row[KEY_HEADER])
         roster_rows.append([clean(row.get(header)) for header in BASELINE_HEADERS] + [result.capability_sources.get(key, "")])
     last_roster_row = _write_rows(roster_sheet, 2, roster_rows)
-    _style_table_sheet(roster_sheet, 1, last_roster_row, len(roster_headers))
+    _style_table_sheet(roster_sheet, 1, last_roster_row, len(roster_headers), add_filter=False)
     if last_roster_row >= 2:
         table = Table(displayName="UpdatedRosterTable", ref=f"A1:P{last_roster_row}")
         table.tableStyleInfo = TableStyleInfo(name="TableStyleMedium2", showRowStripes=True)
@@ -228,3 +228,4 @@ def create_report_from_files(
     result = compare_rosters(baseline, monthly, overrides)
     write_report(report_path, result)
     return result
+

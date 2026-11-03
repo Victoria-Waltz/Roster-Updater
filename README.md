@@ -38,6 +38,8 @@ The shared folder will contain:
 
 ## Monthly process
 
+Report and baseline sheets use their structured Excel tables' filters; Summary uses a worksheet filter. After updating from an earlier version that produced Excel repair warnings, run the comparison and export a fresh report. Previously generated files are not changed by the update. Verify the new export opens normally in desktop Excel before sharing it.
+
 1. Open the app.
 2. Click **Choose file** and select Sven's new `.xlsx` or `.csv` file.
 3. Click **Run update**.
@@ -87,5 +89,6 @@ The baseline may also include `ERP Category`. The app carries this value forward
 - A manager is flagged as potentially inactive when the manager cannot be found in the new active-user pull.
 - The application can still approve a month with unresolved items, but it warns the user first.
 - Do not place the shared data folder inside the application folder. Keep it in a company-approved shared location.
+
 
 

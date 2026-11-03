@@ -1,16 +1,21 @@
 """Regression coverage for the monthly roster workflow (no real employee data)."""
 import csv
+from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from xml.etree import ElementTree
+from zipfile import ZipFile
 
 from openpyxl import load_workbook
+from openpyxl.utils.cell import range_boundaries
 
 import roster_engine
 from roster_updater.constants import BASELINE_HEADERS, CORE_HEADERS
+from roster_updater.excel import write_baseline
 from roster_updater.loading import load_roster
 from roster_updater.models import RosterError
-from roster_updater.reports import create_report_from_files
+from roster_updater.reports import create_report_from_files, write_report
 from roster_updater.storage import SharedRosterStore, shared_lock
 from scripts.make_sample_data import row, write
 
@@ -123,6 +128,77 @@ class RosterWorkflowTests(unittest.TestCase):
         self.assertIs(roster_app.RosterUpdaterApp, RosterUpdaterApp)
         self.assertTrue(issubclass(RosterUpdaterApp, RosterView))
 
+    def assert_table_filters(self, path, expected_tables):
+        """Inspect saved workbook XML, not just the objects used to build it.
+
+        Table sheets must have one table-owned filter and no sheet filter.
+        expected_tables maps worksheet names to expected table ranges.
+        """
+        namespace = {'s': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
+        workbook = load_workbook(path)
+        self.addCleanup(workbook.close)
+        with ZipFile(path) as archive:
+            for index, sheet in enumerate(workbook.worksheets, start=1):
+                xml = ElementTree.fromstring(archive.read(f'xl/worksheets/sheet{index}.xml'))
+                if sheet.title not in expected_tables:
+                    continue
+                expected_range = expected_tables[sheet.title]
+                with self.subTest(sheet=sheet.title):
+                    self.assertIsNone(xml.find('s:autoFilter', namespace))
+                    self.assertIsNone(sheet.auto_filter.ref)
+                    self.assertEqual(len(sheet.tables), 1)
+                    table = next(iter(sheet.tables.values()))
+                    self.assertEqual(table.ref, expected_range)
+                    self.assertIsNotNone(table.autoFilter)
+                    self.assertEqual(table.autoFilter.ref, expected_range)
+                    first_column, header_row, last_column, _ = range_boundaries(expected_range)
+                    self.assertEqual(
+                        [column.name for column in table.tableColumns],
+                        [str(sheet.cell(header_row, column).value)
+                         for column in range(first_column, last_column + 1)],
+                    )
+            table_paths = [name for name in archive.namelist() if name.startswith('xl/tables/') and name.endswith('.xml')]
+            self.assertEqual(len(table_paths), len(expected_tables))
+            for name in table_paths:
+                xml = ElementTree.fromstring(archive.read(name))
+                filters = xml.findall('s:autoFilter', namespace)
+                self.assertEqual(len(filters), 1)
+                self.assertEqual(filters[0].get('ref'), xml.get('ref'))
+
+    def test_report_filters_belong_to_tables(self):
+        """Preserve all three report tables/filters without sheet-level duplicates."""
+        result = self.store.compare(self.monthly)
+        report = write_report(self.root / 'filters.xlsx', result)
+        self.assert_table_filters(report, {
+            'Review': f'A4:K{4 + len(result.review_items)}',
+            'Changes': f'A4:E{4 + len(result.changes)}',
+            'Updated Roster': f'A1:P{1 + len(result.updated_roster)}',
+        })
+        workbook = load_workbook(report)
+        self.addCleanup(workbook.close)
+        self.assertEqual(workbook['Summary'].auto_filter.ref, f'A5:B{5 + len(result.summary)}')
+        self.assertEqual(workbook['Updated Roster']['B2'].value, 'Alex Manager')
+
+    def test_baseline_filter_belongs_to_table(self):
+        """Apply the same filter rule to baseline files created during setup/approval."""
+        self.assert_table_filters(self.store.baseline_path, {'Current Baseline': 'A1:O3'})
+        self.assertEqual(len(load_roster(self.store.baseline_path).rows), 2)
+
+    def test_empty_report_sections_and_baseline_have_no_tables_or_filters(self):
+        """Empty sections keep headings without creating invalid header-only tables."""
+        result = replace(self.store.compare(self.monthly), review_items=[], changes=[], updated_roster=[])
+        report = write_report(self.root / 'empty_report.xlsx', result)
+        baseline = write_baseline(self.root / 'empty_baseline.xlsx', [])
+        for path, titles in [(report, ['Review', 'Changes', 'Updated Roster']),
+                             (baseline, ['Current Baseline'])]:
+            workbook = load_workbook(path)
+            self.addCleanup(workbook.close)
+            for title in titles:
+                with self.subTest(file=path.name, sheet=title):
+                    self.assertFalse(workbook[title].tables)
+                    self.assertIsNone(workbook[title].auto_filter.ref)
+
 
 if __name__ == '__main__':
     unittest.main()
+
