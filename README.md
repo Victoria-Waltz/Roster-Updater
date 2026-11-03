@@ -1,5 +1,7 @@
 # TAIT Roster Updater
 
+**Using the app?** Start with [How to use the Roster Updater](docs/WORK_INSTRUCTIONS.md) for easy monthly instructions.
+
 ## Code organization
 
 New to the code? Read the [code walkthrough](docs/CODE_WALKTHROUGH.md) for terminology, a complete monthly-update example, and guidance on where to make changes. Python docstrings explain the functions and classes; inline comments explain the key processing decisions.
