@@ -10,6 +10,21 @@ This is a local Python application for comparing Sven's monthly active-user file
 
 ## What it produces
 
+The export is **one workbook with four tabs**:
+
+| Tab | Purpose |
+| --- | --- |
+| Summary | Employee, department, and capability counts; review-category color legend; workbook instructions |
+| Review | Only employees with changes or issues, with full-row dashboard colors and filterable Category/Issue columns |
+| Changes | Only changed fields, with the old baseline value and raw new-pull value side by side |
+| Roster Draft | The complete proposed roster, including unchanged active employees, for reviewing/editing the next baseline |
+
+Blue means information changed, red means missing from the new pull, green means new employee, orange/pink means a manager issue, and yellow means capability review. Review can contain several findings for one employee. Roster Draft's capability-cell colors describe value sources separately from the review-category legend.
+
+For Excel edits, correct employee values on **Roster Draft** and save a reviewed copy. After the roster is approved, use **Initialize baseline** to select that reviewed workbook; the app can detect its roster sheet and backs up the previous baseline. Workbook edits are not imported automatically. **Approve as new baseline** uses the app's current comparison, so it does not include external workbook edits. Saved app capability corrections remain in effect for future comparisons; update or remove an obsolete correction if it conflicts with the intended roster value.
+
+Summary counts, Review, Changes, and Capability Source are snapshots taken at export time. Editing the draft does not recalculate those values. Rerun comparison after loading the approved roster to generate a fresh report.
+
 The application compares employees by `Logon Name` and creates one Excel report containing:
 
 - Summary counts
@@ -89,6 +104,7 @@ The baseline may also include `ERP Category`. The app carries this value forward
 - A manager is flagged as potentially inactive when the manager cannot be found in the new active-user pull.
 - The application can still approve a month with unresolved items, but it warns the user first.
 - Do not place the shared data folder inside the application folder. Keep it in a company-approved shared location.
+
 
 
 

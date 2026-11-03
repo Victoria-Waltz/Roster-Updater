@@ -32,7 +32,7 @@ Suppose Alex has `Enable` in the baseline but a blank capability in the new pull
 
 The priority order is: saved nonblank correction, nonblank monthly capability, nonblank baseline capability, then blank. A saved correction takes priority even if a later pull provides a different value; it must be changed or removed if no longer appropriate.
 
-The Changes sheet compares baseline fields with the raw monthly file. The Updated Roster sheet shows the final selected capabilities after precedence rules. These sheets answer different questions, so their capability values can differ.
+The Changes sheet compares baseline fields with the raw monthly file. The Roster Draft sheet shows the final selected capabilities after precedence rules. These sheets answer different questions, so their capability values can differ. Review contains findings only, with a Category column and row colors matching the desktop through `review_categories.py`. Unchanged employees remain available on Roster Draft, alongside the focused comparison tabs in the same workbook.
 
 ## How manager matching works
 
@@ -66,6 +66,9 @@ The shared lock uses exclusive file creation to serialize cooperating writers ac
 - Change shared filenames or approval behavior: use `storage.py`.
 - Change preferences: use `ui/config.py`.
 
-When changing report columns, keep `ReviewItem.as_row()` and `FieldChange.as_row()` aligned with the matching report headers. When adding input columns, review loading, baseline output, and comparison rules together.
+When changing report columns, keep `ReviewItem.as_row()` and `FieldChange.as_row()` aligned with the matching report headers. The report appends a Category value to each model's exported row. When adding input columns, review loading, baseline output, and comparison rules together.
+
+For manual Excel corrections, edit Roster Draft, save a reviewed copy, and use Initialize baseline once that roster is approved. The loader detects the full roster sheet among the other tabs. This backs up and replaces the baseline; it does not synchronize workbook edits into an existing in-memory comparison. Approve as new baseline still uses the app's current result. Saved capability corrections persist independently, so a correction may need to be updated or removed if a later Excel edit supersedes it. The Summary tab explains this distinction and that counts/findings do not recalculate inside Excel.
 
 Run `python -m unittest discover -s tests -v` from the repository root. The tests use synthetic employees and temporary folders. They cover core workflows and imports; they do not replace an interactive Windows check or an executable build test.
+

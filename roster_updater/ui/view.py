@@ -6,6 +6,7 @@ import os
 import tkinter as tk
 
 from ..models import ReviewItem
+from ..review_categories import CATEGORY_COLORS, category_for_issue
 
 
 APP_NAME = "TAIT Roster Updater"
@@ -111,11 +112,8 @@ class RosterView(tk.Tk):
         for column in columns:
             self.review_tree.heading(column, text=headings[column])
             self.review_tree.column(column, width=widths[column], minwidth=90, anchor="w")
-        self.review_tree.tag_configure("capability", background="#FFF2CC")
-        self.review_tree.tag_configure("manager", background="#FCE4D6")
-        self.review_tree.tag_configure("missing", background="#F4CCCC")
-        self.review_tree.tag_configure("new", background="#E2F0D9")
-        self.review_tree.tag_configure("changed", background="#D9EAF7")
+        for category, color in CATEGORY_COLORS.items():
+            self.review_tree.tag_configure(category, background=f"#{color}")
         self.review_tree.bind("<Double-1>", lambda _event: self.edit_capability())
 
         vertical = ttk.Scrollbar(review_frame, orient="vertical", command=self.review_tree.yview)
@@ -169,15 +167,7 @@ class RosterView(tk.Tk):
         self.review_by_iid.clear()
 
         for index, item in enumerate(self.result.review_items):
-            tag = "changed"
-            if "Missing from" in item.issue:
-                tag = "missing"
-            elif "Capability" in item.issue:
-                tag = "capability"
-            elif "Manager" in item.issue:
-                tag = "manager"
-            elif "New employee" in item.issue:
-                tag = "new"
+            tag = category_for_issue(item.issue)
             item_id = f"review-{index}"
             self.review_tree.insert(
                 "",
@@ -203,3 +193,4 @@ class RosterView(tk.Tk):
             messagebox.showinfo("Select an employee", "Select an employee in the review list first.")
             return None
         return self.review_by_iid.get(selected[0])
+

@@ -80,8 +80,8 @@ class RosterWorkflowTests(unittest.TestCase):
         self.assertEqual(records[0]['New Employees'], '1')
         workbook = load_workbook(report)
         self.addCleanup(workbook.close)
-        self.assertEqual(workbook.sheetnames, ['Summary', 'Review', 'Changes', 'Updated Roster'])
-        self.assertEqual(workbook['Updated Roster']['P1'].value, 'Capability Source')
+        self.assertEqual(workbook.sheetnames, ['Summary', 'Review', 'Changes', 'Roster Draft'])
+        self.assertEqual(workbook['Roster Draft']['P1'].value, 'Capability Source')
 
     def test_stale_comparison_cannot_replace_new_baseline(self):
         """Ensure a result based on an older baseline cannot be approved again after promotion."""
@@ -170,14 +170,14 @@ class RosterWorkflowTests(unittest.TestCase):
         result = self.store.compare(self.monthly)
         report = write_report(self.root / 'filters.xlsx', result)
         self.assert_table_filters(report, {
-            'Review': f'A4:K{4 + len(result.review_items)}',
-            'Changes': f'A4:E{4 + len(result.changes)}',
-            'Updated Roster': f'A1:P{1 + len(result.updated_roster)}',
+            'Review': f'A4:L{4 + len(result.review_items)}',
+            'Changes': f'A4:F{4 + len(result.changes)}',
+            'Roster Draft': f'A1:P{1 + len(result.updated_roster)}',
         })
         workbook = load_workbook(report)
         self.addCleanup(workbook.close)
         self.assertEqual(workbook['Summary'].auto_filter.ref, f'A5:B{5 + len(result.summary)}')
-        self.assertEqual(workbook['Updated Roster']['B2'].value, 'Alex Manager')
+        self.assertEqual(workbook['Roster Draft']['B2'].value, 'Alex Manager')
 
     def test_baseline_filter_belongs_to_table(self):
         """Apply the same filter rule to baseline files created during setup/approval."""
@@ -189,7 +189,7 @@ class RosterWorkflowTests(unittest.TestCase):
         result = replace(self.store.compare(self.monthly), review_items=[], changes=[], updated_roster=[])
         report = write_report(self.root / 'empty_report.xlsx', result)
         baseline = write_baseline(self.root / 'empty_baseline.xlsx', [])
-        for path, titles in [(report, ['Review', 'Changes', 'Updated Roster']),
+        for path, titles in [(report, ['Review', 'Changes', 'Roster Draft']),
                              (baseline, ['Current Baseline'])]:
             workbook = load_workbook(path)
             self.addCleanup(workbook.close)
@@ -201,4 +201,5 @@ class RosterWorkflowTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
 

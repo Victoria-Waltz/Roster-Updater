@@ -9,6 +9,7 @@ The code is grouped by responsibility. The monthly workflow and shared data file
 | `roster_updater/utils.py` | Text normalization and file hashing |
 | `roster_updater/loading.py` | CSV/Excel reading and input validation |
 | `roster_updater/comparison.py` | Employee changes, capability precedence, and manager suggestions |
+| `roster_updater/review_categories.py` | Shared review category labels and colors used by the desktop and export |
 | `roster_updater/corrections.py` | Reading saved capability corrections |
 | `roster_updater/excel.py` | Common workbook formatting and baseline output |
 | `roster_updater/reports.py` | Monthly report sheets and file-to-report workflow |
@@ -45,3 +46,4 @@ The UI calls storage and reporting. Storage calls loading, comparison, correctio
 The generator writes synthetic workbooks to `sample_data/` at the repository root. Tests create and clean up their own temporary folders and do not touch the user's configured shared folder. Generated sample files are ignored by Git. Keep real employee files in the approved shared data location described in the README.
 
 The automated tests cover comparison, capability corrections, CSV validation, report output, approval backups/audit history, stale approvals, locking, and launcher imports. Interactive Tkinter behavior and Windows executable packaging should also be checked on Windows before distribution.
+

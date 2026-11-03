@@ -45,7 +45,7 @@ class ReviewItem:
     notes: str = ""
 
     def as_row(self) -> list[str]:
-        """Return fields in the exact order expected by the report's Review headers."""
+        """Return the Review data fields; reporting appends the shared Category label."""
         return [
             self.logon_name,
             self.display_name,
@@ -71,7 +71,7 @@ class FieldChange:
     new_value: str
 
     def as_row(self) -> list[str]:
-        """Return the five values expected by the report's Changes sheet."""
+        """Return the five change values; reporting appends the Category label."""
         return [
             self.logon_name,
             self.display_name,
@@ -111,3 +111,4 @@ class ComparisonResult:
             "Manager not in active pull",
         }
         return sum(item.issue in unresolved for item in self.review_items)
+
