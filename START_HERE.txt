@@ -7,6 +7,13 @@ EASIEST WAY TO TRY IT
 2. Choose one company-approved shared folder.
 3. Click Initialize baseline and choose the approved roster workbook.
 4. Choose Sven's monthly file and click Run update.
+5. Review/confirm findings, then Export report.
+6. Edit Roster Draft in Excel and save the complete reviewed workbook.
+7. Click Import reviewed roster as baseline, choose that file, and approve.
+
+Initialize baseline is for first setup. Approve in-app changes saves the app's
+comparison only; it does not include Excel edits. Use a fresh app export for
+the reviewed import; keep all roster rows/keys/columns and workbook tabs.
 
 FOR A SINGLE WINDOWS APP FILE
 1. Double-click build_windows_app.bat on a Windows computer.
@@ -19,4 +26,5 @@ blocks the setup or the unsigned .exe, ask IT to review and package/sign it.
 
 The sample_data folder contains fake employees only. It can be used to test
 the workflow without using Sven's real monthly pull.
+
 

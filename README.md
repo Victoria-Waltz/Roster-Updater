@@ -21,7 +21,7 @@ The export is **one workbook with four tabs**:
 
 Blue means information changed, red means missing from the new pull, green means new employee, orange/pink means a manager issue, and yellow means capability review. Review can contain several findings for one employee. Roster Draft's capability-cell colors describe value sources separately from the review-category legend.
 
-For Excel edits, correct employee values on **Roster Draft** and save a reviewed copy. After the roster is approved, use **Initialize baseline** to select that reviewed workbook; the app can detect its roster sheet and backs up the previous baseline. Workbook edits are not imported automatically. **Approve as new baseline** uses the app's current comparison, so it does not include external workbook edits. Saved app capability corrections remain in effect for future comparisons; update or remove an obsolete correction if it conflicts with the intended roster value.
+For Excel edits, correct employee values on **Roster Draft**, save the complete workbook as a reviewed copy, and click **Import reviewed roster as baseline**. The app previews the employee/edit counts and confirmed username links before asking for approval. This imports the actual saved Excel edits, migrates confirmed correction keys, and reconciles capability corrections. **Initialize baseline** is for first-time setup. **Approve in-app changes** is the alternative for users who completed all edits in the app; it does not read Excel edits.
 
 Summary counts, Review, Changes, and Capability Source are snapshots taken at export time. Editing the draft does not recalculate those values. Rerun comparison after loading the approved roster to generate a fresh report.
 
@@ -59,8 +59,12 @@ Report and baseline sheets use their structured Excel tables' filters; Summary u
 2. Click **Choose file** and select Sven's new `.xlsx` or `.csv` file.
 3. Click **Run update**.
 4. Review the colored items. Select a row to edit a capability or apply the manager suggestion.
-5. Click **Export report** to share the results with Amanda.
-6. When the month is ready, click **Approve as new baseline**.
+5. Resolve any verified username links in the app, then click **Export report**.
+6. Review the workbook with Amanda. Make Excel corrections on **Roster Draft** and save the **complete workbook** as a clearly named reviewed copy, for example `November_Roster_Reviewed.xlsx`.
+7. Close the workbook, click **Import reviewed roster as baseline**, and select that saved copy. Check the preview counts and approve only when the review is complete.
+8. The app saves the new baseline, reconciles capability corrections, archives the exact reviewed workbook, and keeps backups/audit details. Next month's comparison starts from that baseline.
+
+If all changes were made in the app and you did not edit Excel, **Approve in-app changes** remains available as an alternative. Do not use it to import workbook edits.
 
 Approval automatically saves a dated backup. If another user changes the baseline after someone runs a comparison, the app prevents the older comparison from being approved until it is rerun.
 
@@ -108,11 +112,21 @@ The app checks otherwise unmatched employees for the same nonblank Display Name 
 3. Review the recalculated proposal. The linked employee is no longer counted as new/departed. Changes includes the old/new Logon Name and other changed fields; Review records the confirmation.
 4. Confirmed links let Roster Draft retain the prior ERP Category and use the existing capability precedence. Saved old-key corrections carry into the preview; an already saved new-key correction takes priority.
 5. Use **Clear logon confirmations** to discard all preview links before approval. Links also reset when the input baseline/monthly bytes change or the app closes. Running the same comparison again retains links, including after capability edits.
-6. **Approve as new baseline** persists the new-key roster and migrates old-key corrections, preserving their source/notes metadata. History includes a corrections backup and a confirmed-key mapping receipt. Confirmation alone does not write shared data. As with other approvals, this is a sequence of file writes rather than a multi-file transaction.
+6. **Approve in-app changes** persists the new-key roster and migrates old-key corrections, preserving their source/notes metadata. History includes a corrections backup and a confirmed-key mapping receipt. Confirmation alone does not write shared data. As with other approvals, this is a sequence of file writes rather than a multi-file transaction.
 
 Possible matches remain counted as new/departed until confirmed and are included in unresolved-item warnings. Approval still allows unresolved items after a warning, so inspect these findings before approving. If the baseline, source pull, or saved corrections change after confirmation, rerun before approval.
 
-If you edit Roster Draft in Excel and load it using Initialize baseline, its employee rows are imported, but identity links/correction-key migrations are not imported. Use in-app approval to persist confirmed correction transfers, or explicitly review the saved corrections when following a manual workbook workflow.
+If you edit Roster Draft in Excel, use **Import reviewed roster as baseline** to preserve exported confirmations and reconcile corrections. The workbook retains its comparison context across app restarts; no active comparison is required for import. Older reports without context, raw roster files, or reports exported from a different/older baseline must be replaced with a fresh app export.
+
+### Reviewed workbook rules
+
+- Keep all four visible tabs and save as `.xlsx` (or `.xlsm`). A very-hidden `_RosterContext` tab retains source/proposal snapshots and confirmed links. It is import context, not an editable approval form or a permanent identity rule.
+- Edit employee values on Roster Draft, including ERP Category. Keep every employee, Logon Name, and standard roster column. If employees or usernames are wrong, correct the monthly source and run a new comparison instead of deleting rows or changing keys in the draft.
+- A nonblank capability edited in Excel becomes an approved **Reviewed Excel** correction for later comparisons. Clearing capability removes its saved correction and leaves the imported baseline blank; future source pulls can provide a value under the usual precedence rules.
+- Unchanged capability corrections retain their metadata. Confirmed old-key corrections move to the new key; an explicit Excel capability edit takes priority over the exported correction.
+- Changed baseline/correction snapshots or a workbook modified after the preview cause import to stop. Export a fresh report when the baseline or corrections changed. Source-monthly files are not needed during reviewed import because the workbook retains its original source snapshot.
+- Summary, Review, Changes, and Capability Source remain export-time snapshots. Import archives the exact edited workbook and records field edits in a history receipt; rerun comparison to generate current findings. Import is the explicit approval of all saved roster values, not an automatic acceptance of suggestions.
+- The reviewed importer stages files, backs up baseline/corrections/audit data, and attempts rollback on write failures. A filesystem crash or unavailable storage may still require restoring history backups. No claim of a filesystem-wide transaction is made.
 
 For a fictional rename demo, run `py -m scripts.make_sample_data` and use `sample_rename_baseline.xlsx` and `sample_rename_monthly_pull.xlsx` from `sample_data/` with a separate test shared folder.
 
@@ -121,6 +135,7 @@ For a fictional rename demo, run `py -m scripts.make_sample_data` and use `sampl
 - A manager is flagged as potentially inactive when the manager cannot be found in the new active-user pull.
 - The application can still approve a month with unresolved items, but it warns the user first.
 - Do not place the shared data folder inside the application folder. Keep it in a company-approved shared location.
+
 
 
 

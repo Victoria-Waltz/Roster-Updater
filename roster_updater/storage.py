@@ -19,6 +19,7 @@ from .loading import load_roster
 from .identity import remap_corrections
 from .models import ComparisonResult, LoadedRoster, RosterError
 from .reports import write_report
+from .reviewed_import import ReviewedImport, prepare_reviewed_import, persist_reviewed_import
 from .utils import clean, file_sha256, normalize_key
 
 
@@ -216,6 +217,16 @@ class SharedRosterStore:
             raise RosterError("The files changed during confirmation. Run the comparison again.")
         return updated
 
+    def prepare_reviewed_import(self, path: str | Path) -> ReviewedImport:
+        """Preview an edited app workbook before the user confirms promotion."""
+        return prepare_reviewed_import(self, path)
+
+    def import_reviewed_roster(self, plan: ReviewedImport) -> tuple[Path, Path]:
+        """Import exactly the reviewed preview with backups and correction reconciliation."""
+        self.prepare()
+        with shared_lock(self.lock_path, "Import reviewed roster"):
+            return persist_reviewed_import(self, plan)
+
     def approve(self, result: ComparisonResult) -> tuple[Path, Path]:
         """Promote a comparison to the shared baseline and return report/backup paths.
 
@@ -309,4 +320,5 @@ class SharedRosterStore:
                     ]
                 )
         return report_path, backup_path
+
 

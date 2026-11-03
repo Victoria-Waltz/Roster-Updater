@@ -53,7 +53,8 @@ class RosterView(tk.Tk):
         ttk.Label(main, text=APP_NAME, style="Title.TLabel").grid(row=0, column=0, sticky="w")
         ttk.Label(
             main,
-            text="Upload Sven's file, review the exceptions, and generate the monthly roster report.",
+            text="Compare the monthly file, confirm findings, and export. After editing Roster Draft in Excel, save and import the reviewed workbook.",
+            wraplength=1000,
             style="Muted.TLabel",
         ).grid(row=1, column=0, sticky="w", pady=(2, 16))
 
@@ -129,7 +130,7 @@ class RosterView(tk.Tk):
         ttk.Button(actions, text="Edit capability", command=self.edit_capability).pack(side="left")
         ttk.Button(actions, text="Apply suggestion", command=self.apply_suggestion).pack(side="left", padx=(8, 0))
         ttk.Button(actions, text="Open shared folder", command=self.open_shared_folder).pack(side="left", padx=(8, 0))
-        self.approve_button = ttk.Button(actions, text="Approve as new baseline", command=self.approve_month)
+        self.approve_button = ttk.Button(actions, text="Approve in-app changes", command=self.approve_month)
         self.approve_button.pack(side="right")
         self.export_button = ttk.Button(actions, text="Export report", style="Primary.TButton", command=self.export_report)
         self.export_button.pack(side="right", padx=(0, 8))
@@ -138,6 +139,8 @@ class RosterView(tk.Tk):
         identity_actions.grid(row=7, column=0, sticky="ew", pady=(8, 0))
         ttk.Button(identity_actions, text="Confirm logon change", command=self.confirm_logon_change).pack(side="left")
         ttk.Button(identity_actions, text="Clear logon confirmations", command=self.clear_logon_confirmations).pack(side="left", padx=(8, 0))
+        self.import_button = ttk.Button(identity_actions, text="Import reviewed roster as baseline", command=self.import_reviewed_roster)
+        self.import_button.pack(side="right")
         status = ttk.Label(main, textvariable=self.status_var, style="Muted.TLabel")
         status.grid(row=8, column=0, sticky="w", pady=(8, 0))
 
@@ -150,10 +153,19 @@ class RosterView(tk.Tk):
         self.run_button.configure(state="disabled" if busy else "normal")
         self.export_button.configure(state="disabled" if busy else "normal")
         self.approve_button.configure(state="disabled" if busy else "normal")
+        self.import_button.configure(state="disabled" if busy else "normal")
         self.configure(cursor="wait" if busy else "")
         if message:
             self.status_var.set(message)
         self.update_idletasks()
+
+    def _clear_result_display(self) -> None:
+        """Clear old findings after changing folders or promoting a baseline."""
+        for item_id in self.review_tree.get_children():
+            self.review_tree.delete(item_id)
+        self.review_by_iid.clear()
+        for variable in self.summary_vars.values():
+            variable.set("—")
 
     def _display_result(self) -> None:
         """Replace displayed counts and review rows from self.result.
@@ -197,5 +209,6 @@ class RosterView(tk.Tk):
             messagebox.showinfo("Select an employee", "Select an employee in the review list first.")
             return None
         return self.review_by_iid.get(selected[0])
+
 
 

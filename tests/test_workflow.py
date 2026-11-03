@@ -80,7 +80,8 @@ class RosterWorkflowTests(unittest.TestCase):
         self.assertEqual(records[0]['New Employees'], '1')
         workbook = load_workbook(report)
         self.addCleanup(workbook.close)
-        self.assertEqual(workbook.sheetnames, ['Summary', 'Review', 'Changes', 'Roster Draft'])
+        self.assertEqual([sheet.title for sheet in workbook if sheet.sheet_state == 'visible'],
+                         ['Summary', 'Review', 'Changes', 'Roster Draft'])
         self.assertEqual(workbook['Roster Draft']['P1'].value, 'Capability Source')
 
     def test_stale_comparison_cannot_replace_new_baseline(self):
@@ -201,5 +202,6 @@ class RosterWorkflowTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
 
 

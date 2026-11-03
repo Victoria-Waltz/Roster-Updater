@@ -40,7 +40,7 @@ Before comparison, `identity.py` looks for unmatched old/new records sharing a d
 
 The controller's Confirm logon change action asks the store to revalidate file fingerprints and return a new comparison. `confirmed_logon_changes` maps a normalized new key to its old key; validation rejects ambiguous or stale pairs on each comparison. The old baseline row supplies ERP Category and capability fallback only for confirmed links. Logon Name is added to the field-change audit, and those confirmed pairs are excluded from new/departed counts.
 
-Corrections are remapped in memory for the preview. Approval checks their snapshot fingerprint, backs up the old correction file, promotes the roster, and saves the remapped correction keys plus a mapping receipt in history. Existing new-key corrections win over old-key corrections. No permanent fuzzy identity rule is saved. Clear discards session links; changing input bytes also resets them. Manual workbook initialization imports roster values without migrating correction keys. See README for the user workflow.
+Corrections are remapped in memory for the preview. Approval checks their snapshot fingerprint, backs up the old correction file, promotes the roster, and saves the remapped correction keys plus a mapping receipt in history. Existing new-key corrections win over old-key corrections. No permanent fuzzy identity rule is saved. Clear discards session links; changing input bytes also resets them. Reviewed workbook import validates the saved export context and migrates confirmed correction keys alongside actual Excel edits. See README for the user workflow.
 
 ## How manager matching works
 
@@ -51,11 +51,12 @@ The comparison builds dictionaries for email and display name from the proposed 
 | Action | Files affected |
 | --- | --- |
 | Choose shared folder | Local preferences and any missing shared directories |
-| Initialize baseline | Baseline workbook; backup if replacing an existing baseline |
+| Initialize baseline | First baseline workbook (the desktop action is first-time setup only) |
 | Run comparison | None |
 | Save/remove correction | Corrections JSON |
 | Export | Report at the selected destination |
-| Approve | Baseline backup, source-pull copy, report, new baseline, and audit CSV |
+| Approve in-app changes | Baseline backup, source-pull copy, report, new baseline, and audit CSV |
+| Import reviewed roster | Exact reviewed workbook archive, baseline/correction/audit backups, new baseline, reconciled corrections, audit CSV, and edit receipt |
 
 The shared lock uses exclusive file creation to serialize cooperating writers accessing the same filesystem. A stale comparison is rejected if the baseline's hash changed after loading. Workbook and JSON writes use temporary files before replacement, but the entire approval sequence is not one transaction. A failure midway can leave some steps completed. Independently synchronized folders do not make the lock a distributed coordination mechanism.
 
@@ -76,8 +77,13 @@ The shared lock uses exclusive file creation to serialize cooperating writers ac
 
 When changing report columns, keep `ReviewItem.as_row()` and `FieldChange.as_row()` aligned with the matching report headers. The report appends a Category value to each model's exported row. When adding input columns, review loading, baseline output, and comparison rules together.
 
-For manual Excel corrections, edit Roster Draft, save a reviewed copy, and use Initialize baseline once that roster is approved. The loader detects the full roster sheet among the other tabs. This backs up and replaces the baseline; it does not synchronize workbook edits into an existing in-memory comparison. Approve as new baseline still uses the app's current result. Saved capability corrections persist independently, so a correction may need to be updated or removed if a later Excel edit supersedes it. The Summary tab explains this distinction and that counts/findings do not recalculate inside Excel.
+For Excel corrections, save the whole edited workbook and use Import reviewed roster as baseline. `review_context.py` writes source/proposal snapshots, baseline/correction fingerprints, and confirmed identity links to a very-hidden worksheet, chunking JSON below Excel's cell-size limit. `reviewed_import.py` validates that context against the current store and prepares a concrete preview. Confirmation is independent of an in-memory app session.
+
+The importer requires exactly the exported employee keys and each standard roster column, including ERP Category. Confirmed links are revalidated against the original monthly snapshot rather than edited title/manager fields. Capability edits are compared with the exported proposal: nonblank edits become Reviewed Excel corrections; blank edits remove the saved correction. Other employee fields are imported exactly as saved. Unchanged corrections keep their notes/source metadata.
+
+Commit rechecks file fingerprints under the shared lock, stages the new baseline/corrections/audit files, archives the edited workbook, and backs up authoritative files. Replacement failures trigger restoration; history remains available for crash recovery. Receipts record reviewed file fingerprints, confirmed links, and edited fields. The archived workbook's comparison tabs remain export-time snapshots. The UI clears old findings and labels the alternate direct-approval action Approve in-app changes.
 
 Run `python -m unittest discover -s tests -v` from the repository root. The tests use synthetic employees and temporary folders. They cover core workflows and imports; they do not replace an interactive Windows check or an executable build test.
+
 
 

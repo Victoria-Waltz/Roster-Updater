@@ -27,6 +27,7 @@ from .excel import (
 )
 from .loading import load_roster
 from .models import ComparisonResult
+from .review_context import add_review_context
 from .review_categories import CATEGORY_COLORS, CATEGORY_LABELS, category_for_issue
 from .utils import clean, normalize_key
 
@@ -118,12 +119,12 @@ def write_report(path: str | Path, result: ComparisonResult) -> Path:
         "Review: only employees with changes or issues; filter Category or Issue to focus the list.",
         "Changes: one row per changed field, showing the baseline and raw new-pull values.",
         "Roster Draft: the complete proposed roster. Make Excel roster corrections on this tab and save a reviewed copy.",
-        "Workbook edits are not read automatically by the app. Once approved, use Initialize baseline to select the reviewed workbook.",
-        "Approve as new baseline uses the app's current comparison; it does not import edits made in this workbook.",
-        "Capability Source records where the exported value came from; editing a cell in Excel does not update that label or saved app corrections.",
+        "After saving Excel edits, click Import reviewed roster as baseline in the app and select this saved workbook. Initialize baseline is for first-time setup.",
+        "Approve in-app changes saves the current app comparison; it does not import edits made in Excel. Use Import reviewed roster as baseline for Excel edits.",
+        "Capability Source records where the exported value came from; editing a cell does not update that label. Saved capability corrections are reconciled when you import the reviewed file.",
         "Counts and review findings are an export-time snapshot; rerun the app to recalculate after changing the baseline.",
         "Purple Logon name review rows show possible/confirmed username changes. Confirm in the app only after verifying identity; ambiguous matches stay separate.",
-        "Confirmed links affect this draft only until app approval moves saved corrections. Importing an edited workbook does not transfer those saved correction keys.",
+        "The reviewed import carries confirmed username links and reconciles capability edits with saved corrections. Keep the complete workbook and all Roster Draft employee keys.",
     ]
     for offset, text in enumerate(guide_lines, start=1):
         row_number = guide_row + offset
@@ -223,14 +224,14 @@ def write_report(path: str | Path, result: ComparisonResult) -> Path:
             capability_cell = roster_sheet.cell(row_number, capability_column)
             if source in {"Baseline", "Manager suggestion"}:
                 capability_cell.fill = PatternFill("solid", fgColor=LIGHT_YELLOW)
-            elif source in {"Slack/manual", "Manual", "Other"}:
+            elif source in {"Slack/manual", "Manual", "Other", "Reviewed Excel"}:
                 capability_cell.fill = PatternFill("solid", fgColor=LIGHT_PINK)
             elif source == "Missing":
                 capability_cell.fill = PatternFill("solid", fgColor=LIGHT_RED)
     # Keep row 1 importable as roster headings; put editing guidance in a cell comment.
     roster_sheet["A1"].comment = Comment(
-        "Full proposed roster: edit employee values on this tab and save a reviewed copy. "
-        "See Summary for how to load it as a baseline. Workbook edits do not update the app automatically.",
+        "Full proposed roster: edit employee values on this tab and save the complete workbook as a reviewed copy. "
+        "Use Import reviewed roster as baseline in the app. Do not remove employees, change Logon Names, or delete the workbook context tab.",
         "TAIT Roster Updater",
     )
     roster_sheet.sheet_properties.tabColor = NAVY
@@ -243,6 +244,8 @@ def write_report(path: str | Path, result: ComparisonResult) -> Path:
         worksheet.page_setup.fitToHeight = 0
         worksheet.sheet_properties.outlinePr.summaryBelow = True
 
+    # Preserve the export snapshot for importing the reviewed workbook after restart.
+    add_review_context(workbook, result)
     temp_path = output.with_suffix(output.suffix + ".tmp")
     workbook.save(temp_path)
     os.replace(temp_path, output)
@@ -268,6 +271,7 @@ def create_report_from_files(
     result = compare_rosters(baseline, monthly, overrides)
     write_report(report_path, result)
     return result
+
 
 
 
