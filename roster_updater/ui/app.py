@@ -152,7 +152,15 @@ class RosterUpdaterApp(RosterView):
         try:
             self._set_busy(True, "Comparing the new pull with the shared baseline...")
             # Comparing produces an in-memory proposal. Approval is a separate action.
-            self.result = self.store.compare(source)
+            previous = self.result
+            fresh = self.store.compare(source)
+            # Retain session confirmations only while both input files are identical.
+            # Capability edits rerun the comparison and keep these verified links.
+            if (previous and previous.confirmed_logon_changes
+                    and previous.baseline.file_hash == fresh.baseline.file_hash
+                    and previous.monthly_pull.file_hash == fresh.monthly_pull.file_hash):
+                fresh = self.store.compare(source, previous.confirmed_logon_changes)
+            self.result = fresh
             self._display_result()
             self.status_var.set(
                 f"Comparison complete. {self.result.summary['Review items']:,} items are available for review."
@@ -185,6 +193,9 @@ class RosterUpdaterApp(RosterView):
         item = self._selected_review_item()
         if not item:
             return
+        if "Logon Name Change" in item.issue:
+            messagebox.showinfo("Review identity first", "Use Confirm logon change for this finding; edit capabilities on the employee's other review rows.")
+            return
         if item.issue == "Missing from new pull":
             messagebox.showinfo("Not in the new pull", "Capability corrections cannot be applied to a departed employee.")
             return
@@ -215,7 +226,7 @@ class RosterUpdaterApp(RosterView):
         item = self._selected_review_item()
         if not item:
             return
-        if not item.suggested_value:
+        if item.issue != "Capability suggestion" or not item.suggested_value:
             messagebox.showinfo("No suggestion", "This review item does not have a capability suggestion.")
             return
         if not messagebox.askyesno(
@@ -232,6 +243,52 @@ class RosterUpdaterApp(RosterView):
             )
             self.run_update()
             self.status_var.set(f"Applied the capability suggestion for {item.display_name}.")
+        except Exception as exc:
+            self._show_error(exc)
+
+    def confirm_logon_change(self) -> None:
+        """Ask a human to verify a unique candidate before linking its old/new records."""
+        if not self.store or not self.result:
+            messagebox.showinfo("Run an update", "Run the monthly update first.")
+            return
+        item = self._selected_review_item()
+        if not item or item.issue != "Possible Logon Name Change":
+            messagebox.showinfo("Select a candidate", "Select a Possible Logon Name Change finding first.")
+            return
+        candidate = next((candidate for candidate in self.result.logon_candidates
+                          if normalize_key(candidate.old_logon) == normalize_key(item.current_value)
+                          and normalize_key(candidate.new_logon) == normalize_key(item.logon_name)), None)
+        if not candidate or candidate.ambiguous:
+            messagebox.showinfo("Ambiguous identity", "Several records match. Verify and correct the source files before linking this employee.")
+            return
+        if not messagebox.askyesno(
+            "Confirm the same employee?",
+            f"Employee: {candidate.display_name}\nOld Logon Name: {candidate.old_logon}\n"
+            f"New Logon Name: {candidate.new_logon}\n\nMatching details:\n" +
+            "\n".join(candidate.evidence_details) + "\n\n" +
+            "Confirm only after verifying these are the same person. The draft will use the old ERP Category "
+            "and capability history. Saved corrections move when you approve the month in the app. "
+            "Until then, Clear logon confirmations discards these links.",
+        ):
+            return
+        try:
+            self.result = self.store.confirm_logon_change(self.result, candidate.old_logon, candidate.new_logon)
+            self._display_result()
+            self.status_var.set(f"Confirmed the Logon Name change for {candidate.display_name}. Review the updated draft before approval.")
+        except Exception as exc:
+            self._show_error(exc)
+
+    def clear_logon_confirmations(self) -> None:
+        """Discard session-only links and return to a fresh, unlinked comparison."""
+        if not self.store or not self.result or not self.result.confirmed_logon_changes:
+            messagebox.showinfo("No confirmations", "There are no Logon Name confirmations to clear.")
+            return
+        if not messagebox.askyesno("Clear logon confirmations?", "Discard all identity links for this comparison? Saved data has not been changed by these confirmations."):
+            return
+        try:
+            self.result = self.store.compare(self.result.monthly_pull.source_path)
+            self._display_result()
+            self.status_var.set("Logon confirmations cleared. New/departed findings restored.")
         except Exception as exc:
             self._show_error(exc)
 
@@ -270,7 +327,7 @@ class RosterUpdaterApp(RosterView):
             return
         warning = "This will save a backup and make the updated roster the new shared baseline."
         if self.result.unresolved_count:
-            warning += f"\n\nThere are still {self.result.unresolved_count:,} capability or manager items to review."
+            warning += f"\n\nThere are still {self.result.unresolved_count:,} capability, manager, or logon-name items to review."
         if not messagebox.askyesno("Approve this month?", warning):
             return
         try:
@@ -320,3 +377,4 @@ def main() -> None:
     """Construct the desktop application and start Tkinter's event loop."""
     app = RosterUpdaterApp()
     app.mainloop()
+

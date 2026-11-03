@@ -82,6 +82,17 @@ class FieldChange:
 
 
 @dataclass
+class LogonNameCandidate:
+    """A possible employee rename with evidence for human review, never an auto-merge."""
+    old_logon: str
+    new_logon: str
+    display_name: str
+    evidence: tuple[str, ...]
+    ambiguous: bool = False
+    evidence_details: tuple[str, ...] = ()
+
+
+@dataclass
 class ComparisonResult:
     """In-memory proposal shared by comparison, the UI, reporting, and approval.
 
@@ -96,10 +107,13 @@ class ComparisonResult:
     capability_sources: dict[str, str]
     summary: dict[str, int]
     created_at: datetime = field(default_factory=datetime.now)
+    logon_candidates: list[LogonNameCandidate] = field(default_factory=list)
+    confirmed_logon_changes: dict[str, str] = field(default_factory=dict)
+    corrections_hash: str | None = None
 
     @property
     def unresolved_count(self) -> int:
-        """Count capability and manager findings that trigger the approval warning.
+        """Count capability, manager, and pending identity findings for the approval warning.
 
         This counts review items, not unique employees, and excludes informational
         new-employee, changed-field, and missing-from-pull findings.
@@ -109,6 +123,8 @@ class ComparisonResult:
             "Capability suggestion",
             "Missing manager information",
             "Manager not in active pull",
+            "Possible Logon Name Change",
         }
         return sum(item.issue in unresolved for item in self.review_items)
+
 

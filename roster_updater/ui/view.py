@@ -134,8 +134,12 @@ class RosterView(tk.Tk):
         self.export_button = ttk.Button(actions, text="Export report", style="Primary.TButton", command=self.export_report)
         self.export_button.pack(side="right", padx=(0, 8))
 
+        identity_actions = ttk.Frame(main)
+        identity_actions.grid(row=7, column=0, sticky="ew", pady=(8, 0))
+        ttk.Button(identity_actions, text="Confirm logon change", command=self.confirm_logon_change).pack(side="left")
+        ttk.Button(identity_actions, text="Clear logon confirmations", command=self.clear_logon_confirmations).pack(side="left", padx=(8, 0))
         status = ttk.Label(main, textvariable=self.status_var, style="Muted.TLabel")
-        status.grid(row=7, column=0, sticky="w", pady=(8, 0))
+        status.grid(row=8, column=0, sticky="w", pady=(8, 0))
 
     def _set_busy(self, busy: bool, message: str = "") -> None:
         """Toggle the main action buttons/cursor and optionally update status text.
@@ -193,4 +197,5 @@ class RosterView(tk.Tk):
             messagebox.showinfo("Select an employee", "Select an employee in the review list first.")
             return None
         return self.review_by_iid.get(selected[0])
+
 

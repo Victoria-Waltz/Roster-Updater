@@ -77,10 +77,23 @@ def main():
     ]
     write(output / "sample_baseline.xlsx", "All_Users_Active_Info (1)", BASELINE_HEADERS, baseline)
     write(output / "sample_monthly_pull.xlsx", "All Users", CORE_HEADERS, monthly)
+    # A dedicated fictional rename pair isolates identity review from other examples.
+    prior = row(3, "Taylor Cooper", "taylor.old", "taylor.old@example.test",
+                "Designer", "Design", "Make", "Alex Manager", "alex@example.test", "Design ERP")
+    prior["Last Name"] = "Old"
+    renamed = dict(prior, **{
+        "Logon Name": "taylor.cooper", "Last Name": "Cooper",
+        "Email Address": "taylor.cooper@example.test", "Capability": "",
+    })
+    write(output / "sample_rename_baseline.xlsx", "All Users", BASELINE_HEADERS,
+          [baseline[0], baseline[3], prior])
+    write(output / "sample_rename_monthly_pull.xlsx", "All Users", CORE_HEADERS,
+          [baseline[0], baseline[3], renamed])
     print(f"Created sample files in {output}")
 
 
 if __name__ == "__main__":
     main()
+
 
 

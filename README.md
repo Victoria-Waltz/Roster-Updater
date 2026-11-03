@@ -99,11 +99,29 @@ The baseline may also include `ERP Category`. The app carries this value forward
 
 ## Important behavior
 
+### Reviewing a changed Logon Name
+
+The app checks otherwise unmatched employees for the same nonblank Display Name and at least two matching, nonblank fields among Title, Department, Manager, and Manager Email Address. This is evidence for review, not proof of identity. A surname/login/email change can therefore be found when the display name and supporting fields remain consistent; changes with insufficient evidence still appear as new/missing employees.
+
+1. Select a purple **Possible Logon Name Change** finding. Current and Suggested show the old and new logon names; Notes contains the matching values.
+2. Click **Confirm logon change**, verify the employee and evidence, and confirm. Ambiguous candidates involving multiple qualifying records cannot be linked; verify/correct the source files instead.
+3. Review the recalculated proposal. The linked employee is no longer counted as new/departed. Changes includes the old/new Logon Name and other changed fields; Review records the confirmation.
+4. Confirmed links let Roster Draft retain the prior ERP Category and use the existing capability precedence. Saved old-key corrections carry into the preview; an already saved new-key correction takes priority.
+5. Use **Clear logon confirmations** to discard all preview links before approval. Links also reset when the input baseline/monthly bytes change or the app closes. Running the same comparison again retains links, including after capability edits.
+6. **Approve as new baseline** persists the new-key roster and migrates old-key corrections, preserving their source/notes metadata. History includes a corrections backup and a confirmed-key mapping receipt. Confirmation alone does not write shared data. As with other approvals, this is a sequence of file writes rather than a multi-file transaction.
+
+Possible matches remain counted as new/departed until confirmed and are included in unresolved-item warnings. Approval still allows unresolved items after a warning, so inspect these findings before approving. If the baseline, source pull, or saved corrections change after confirmation, rerun before approval.
+
+If you edit Roster Draft in Excel and load it using Initialize baseline, its employee rows are imported, but identity links/correction-key migrations are not imported. Use in-app approval to persist confirmed correction transfers, or explicitly review the saved corrections when following a manual workbook workflow.
+
+For a fictional rename demo, run `py -m scripts.make_sample_data` and use `sample_rename_baseline.xlsx` and `sample_rename_monthly_pull.xlsx` from `sample_data/` with a separate test shared folder.
+
 - `Logon Name` is the unique employee key. Duplicate logon names stop the update.
 - The app never automatically applies a manager capability suggestion.
 - A manager is flagged as potentially inactive when the manager cannot be found in the new active-user pull.
 - The application can still approve a month with unresolved items, but it warns the user first.
 - Do not place the shared data folder inside the application folder. Keep it in a company-approved shared location.
+
 
 
 
