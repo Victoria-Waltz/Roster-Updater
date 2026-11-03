@@ -122,6 +122,8 @@ def write_report(path: str | Path, result: ComparisonResult) -> Path:
         "Approve as new baseline uses the app's current comparison; it does not import edits made in this workbook.",
         "Capability Source records where the exported value came from; editing a cell in Excel does not update that label or saved app corrections.",
         "Counts and review findings are an export-time snapshot; rerun the app to recalculate after changing the baseline.",
+        "Purple Logon name review rows show possible/confirmed username changes. Confirm in the app only after verifying identity; ambiguous matches stay separate.",
+        "Confirmed links affect this draft only until app approval moves saved corrections. Importing an edited workbook does not transfer those saved correction keys.",
     ]
     for offset, text in enumerate(guide_lines, start=1):
         row_number = guide_row + offset
@@ -266,5 +268,6 @@ def create_report_from_files(
     result = compare_rosters(baseline, monthly, overrides)
     write_report(report_path, result)
     return result
+
 
 

@@ -10,6 +10,7 @@ from .constants import (
     ERP_HEADER,
     KEY_HEADER,
 )
+from .identity import find_logon_candidates, remap_corrections, validate_logon_links
 from .models import ComparisonResult, FieldChange, LoadedRoster, ReviewItem
 from .utils import clean, normalize_key
 
@@ -88,6 +89,7 @@ def compare_rosters(
     baseline: LoadedRoster,
     monthly_pull: LoadedRoster,
     overrides: dict[str, dict[str, str]] | None = None,
+    confirmed_logon_changes: dict[str, str] | None = None,
 ) -> ComparisonResult:
     """Build an updated roster and review findings without writing any files.
 
@@ -95,6 +97,8 @@ def compare_rosters(
         baseline: Previously approved, validated employee records.
         monthly_pull: New validated active-user records.
         overrides: Saved corrections keyed by normalized logon name, or None.
+        confirmed_logon_changes: Explicit new-key -> old-key links for these files.
+            Candidates alone never transfer baseline values or corrections.
 
     Returns:
         A ComparisonResult with proposed rows, review items, field changes,
@@ -109,6 +113,9 @@ def compare_rosters(
     overrides = overrides or {}
     baseline_map = _row_map(baseline.rows)
     monthly_map = _row_map(monthly_pull.rows)
+    candidates = find_logon_candidates(baseline.rows, monthly_pull.rows)
+    links = validate_logon_links(candidates, confirmed_logon_changes)
+    overrides = remap_corrections(overrides, links)
 
     updated: list[dict[str, Any]] = []
     capability_sources: dict[str, str] = {}
@@ -120,7 +127,7 @@ def compare_rosters(
     # Create new dictionaries so the original input rows stay available for audit.
     for source_row in monthly_pull.rows:
         key = normalize_key(source_row[KEY_HEADER])
-        prior = baseline_map.get(key)
+        prior = baseline_map.get(links.get(key, key))
         final_row = {header: clean(source_row.get(header)) for header in BASELINE_HEADERS}
         override = overrides.get(key, {})
         override_capability = clean(override.get("capability"))
@@ -149,7 +156,10 @@ def compare_rosters(
 
         if prior:
             person_changes: list[str] = []
-            for field_name in COMPARE_FIELDS:
+            # Logon Name is normally the key, but a confirmed rename is itself
+            # a field change and must remain visible in the exported audit trail.
+            fields = ([KEY_HEADER] if key in links else []) + COMPARE_FIELDS
+            for field_name in fields:
                 old_value = clean(prior.get(field_name))
                 raw_new_value = clean(source_row.get(field_name))
                 # A missing monthly capability is handled by carry-forward,
@@ -277,7 +287,7 @@ def compare_rosters(
 
     # Absence from the active pull is a review signal, not proof of departure.
     # These people are not included in the proposed active roster.
-    departed_keys = [key for key in baseline_map if key not in monthly_map]
+    departed_keys = [key for key in baseline_map if key not in monthly_map and key not in links.values()]
     for key in departed_keys:
         employee = baseline_map[key]
         review.append(
@@ -291,6 +301,33 @@ def compare_rosters(
                 notes="Review as a possible departure or inactive account.",
             )
         )
+
+    pending_candidates = [item for item in candidates if normalize_key(item.new_logon) not in links]
+    for candidate in pending_candidates:
+        review.append(ReviewItem(
+            logon_name=candidate.new_logon,
+            display_name=candidate.display_name,
+            issue="Possible Logon Name Change",
+            current_value=candidate.old_logon,
+            suggested_value=candidate.new_logon,
+            changed_fields=KEY_HEADER,
+            notes="Matching evidence: " + "; ".join(candidate.evidence_details) + ". " + (
+                "Ambiguous: multiple qualifying records. Do not link; verify the source files."
+                if candidate.ambiguous else
+                "Select this finding and use Confirm logon change after verifying the employee."
+            ),
+        ))
+    for new, old in links.items():
+        review.append(ReviewItem(
+            logon_name=clean(monthly_map[new][KEY_HEADER]),
+            display_name=clean(monthly_map[new].get("Display Name")),
+            issue="Confirmed Logon Name Change",
+            current_value=clean(baseline_map[old][KEY_HEADER]),
+            suggested_value=clean(monthly_map[new][KEY_HEADER]),
+            changed_fields=KEY_HEADER,
+            notes="Explicitly confirmed for this comparison. ERP Category and capability precedence now use the prior record. "
+                  "Saved corrections move only when this month is approved in the app.",
+        ))
 
     # Enrich findings with hierarchy context useful to the person reviewing them.
     for item in review:
@@ -306,7 +343,7 @@ def compare_rosters(
             item.managers_manager = clean(managers_manager.get("Display Name"))
             item.managers_manager_email = clean(managers_manager.get("Email Address"))
 
-    new_keys = set(monthly_map) - set(baseline_map)
+    new_keys = set(monthly_map) - set(baseline_map) - set(links)
     # Sets count unique people; changes/review lists count individual findings.
     # One employee can therefore contribute several review items.
     summary = {
@@ -320,6 +357,8 @@ def compare_rosters(
         "Capability suggestions": capability_suggestions,
         "Manager issues": len(manager_issue_people),
         "Review items": len(review),
+        "Possible logon changes": len(pending_candidates),
+        "Confirmed logon changes": len(links),
     }
 
     review.sort(key=lambda item: (item.issue, item.display_name.casefold(), item.logon_name.casefold()))
@@ -333,4 +372,7 @@ def compare_rosters(
         changes=changes,
         capability_sources=capability_sources,
         summary=summary,
+        logon_candidates=pending_candidates,
+        confirmed_logon_changes=links,
     )
+

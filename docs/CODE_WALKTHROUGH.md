@@ -34,6 +34,14 @@ The priority order is: saved nonblank correction, nonblank monthly capability, n
 
 The Changes sheet compares baseline fields with the raw monthly file. The Roster Draft sheet shows the final selected capabilities after precedence rules. These sheets answer different questions, so their capability values can differ. Review contains findings only, with a Category column and row colors matching the desktop through `review_categories.py`. Unchanged employees remain available on Roster Draft, alongside the focused comparison tabs in the same workbook.
 
+## Reviewing employee Logon Name changes
+
+Before comparison, `identity.py` looks for unmatched old/new records sharing a display name and at least two matching nonblank supporting fields. `LogonNameCandidate` holds both usernames, matching values, and ambiguity status. Candidates create purple review items without changing the underlying matching. The same input data can therefore still show a new and a missing employee until a reviewer confirms the link.
+
+The controller's Confirm logon change action asks the store to revalidate file fingerprints and return a new comparison. `confirmed_logon_changes` maps a normalized new key to its old key; validation rejects ambiguous or stale pairs on each comparison. The old baseline row supplies ERP Category and capability fallback only for confirmed links. Logon Name is added to the field-change audit, and those confirmed pairs are excluded from new/departed counts.
+
+Corrections are remapped in memory for the preview. Approval checks their snapshot fingerprint, backs up the old correction file, promotes the roster, and saves the remapped correction keys plus a mapping receipt in history. Existing new-key corrections win over old-key corrections. No permanent fuzzy identity rule is saved. Clear discards session links; changing input bytes also resets them. Manual workbook initialization imports roster values without migrating correction keys. See README for the user workflow.
+
 ## How manager matching works
 
 The comparison builds dictionaries for email and display name from the proposed roster. A manager's email is tried first; if not found, an unambiguous display name is tried. Duplicate display names are removed from the name lookup to avoid guessing. Email duplicates currently keep the last record. An unmatched manager is a possible inactive account, not a confirmed departure. Hierarchy lookup checks only the manager and the manager's manager.
@@ -71,4 +79,5 @@ When changing report columns, keep `ReviewItem.as_row()` and `FieldChange.as_row
 For manual Excel corrections, edit Roster Draft, save a reviewed copy, and use Initialize baseline once that roster is approved. The loader detects the full roster sheet among the other tabs. This backs up and replaces the baseline; it does not synchronize workbook edits into an existing in-memory comparison. Approve as new baseline still uses the app's current result. Saved capability corrections persist independently, so a correction may need to be updated or removed if a later Excel edit supersedes it. The Summary tab explains this distinction and that counts/findings do not recalculate inside Excel.
 
 Run `python -m unittest discover -s tests -v` from the repository root. The tests use synthetic employees and temporary folders. They cover core workflows and imports; they do not replace an interactive Windows check or an executable build test.
+
 

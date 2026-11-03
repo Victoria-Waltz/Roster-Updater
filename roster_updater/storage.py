@@ -16,6 +16,7 @@ from .comparison import compare_rosters
 from .corrections import load_overrides
 from .excel import write_baseline
 from .loading import load_roster
+from .identity import remap_corrections
 from .models import ComparisonResult, LoadedRoster, RosterError
 from .reports import write_report
 from .utils import clean, file_sha256, normalize_key
@@ -171,14 +172,49 @@ class SharedRosterStore:
                 temp_path.write_text(json.dumps(overrides, indent=2, ensure_ascii=False), encoding="utf-8")
                 os.replace(temp_path, self.overrides_path)
 
-    def compare(self, monthly_path: str | Path) -> ComparisonResult:
+    def compare(
+        self, monthly_path: str | Path,
+        confirmed_logon_changes: dict[str, str] | None = None,
+    ) -> ComparisonResult:
         """Load the current baseline, monthly file, and corrections into a proposal.
 
         No approval or file writes occur; the UI can review or export the result.
         """
         baseline = self.load_baseline()
         monthly = load_roster(monthly_path)
-        return compare_rosters(baseline, monthly, self.load_overrides())
+        corrections_hash = self._corrections_hash()
+        overrides = self.load_overrides()
+        if corrections_hash != self._corrections_hash():
+            raise RosterError("Capability corrections changed while loading. Run the comparison again.")
+        result = compare_rosters(baseline, monthly, overrides, confirmed_logon_changes)
+        result.corrections_hash = corrections_hash
+        return result
+
+    def _corrections_hash(self) -> str:
+        """Fingerprint the corrections snapshot; absence is a valid empty state."""
+        return file_sha256(self.overrides_path) if self.overrides_path.exists() else ""
+
+    def confirm_logon_change(self, result: ComparisonResult, old_logon: str, new_logon: str) -> ComparisonResult:
+        """Revalidate the files and return a linked proposal without writing data.
+
+        The comparison validates that each link remains a unique qualifying pair.
+        Confirmation is scoped to this baseline/pull, not a permanent identity rule.
+        """
+        if not self.has_baseline() or file_sha256(self.baseline_path) != result.baseline.file_hash:
+            raise RosterError("The baseline changed. Run the comparison again before confirming.")
+        if file_sha256(result.monthly_pull.source_path) != result.monthly_pull.file_hash:
+            raise RosterError("The monthly file changed. Run the comparison again before confirming.")
+        if self._corrections_hash() != result.corrections_hash:
+            raise RosterError("Capability corrections changed. Run the comparison again before confirming.")
+        links = dict(result.confirmed_logon_changes)
+        links[normalize_key(new_logon)] = normalize_key(old_logon)
+        updated = self.compare(result.monthly_pull.source_path, links)
+        # Protect against file replacement during the reload as well.
+        if (updated.baseline.file_hash != result.baseline.file_hash
+                or updated.monthly_pull.file_hash != result.monthly_pull.file_hash
+                or updated.corrections_hash != result.corrections_hash):
+            raise RosterError("The files changed during confirmation. Run the comparison again.")
+        return updated
 
     def approve(self, result: ComparisonResult) -> tuple[Path, Path]:
         """Promote a comparison to the shared baseline and return report/backup paths.
@@ -203,6 +239,14 @@ class SharedRosterStore:
                     "Another user may have approved an update. Run the comparison again before approving."
                 )
 
+            migrated_overrides = None
+            if result.confirmed_logon_changes:
+                if file_sha256(result.monthly_pull.source_path) != result.monthly_pull.file_hash:
+                    raise RosterError("The monthly file changed. Run the comparison again before approving.")
+                if result.corrections_hash != self._corrections_hash():
+                    raise RosterError("Capability corrections changed. Run the comparison again before approving.")
+                migrated_overrides = remap_corrections(self.load_overrides(), result.confirmed_logon_changes)
+
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             backup_path = self.history_dir / f"baseline_{timestamp}.xlsx"
             source_copy = self.history_dir / f"source_pull_{timestamp}{result.monthly_pull.source_path.suffix.lower()}"
@@ -212,7 +256,25 @@ class SharedRosterStore:
             shutil.copy2(self.baseline_path, backup_path)
             shutil.copy2(result.monthly_pull.source_path, source_copy)
             write_report(report_path, result)
+            # Keep the old corrections for recovery before migrating confirmed keys.
+            if migrated_overrides is not None and self.overrides_path.exists():
+                shutil.copy2(self.overrides_path, self.history_dir / f"corrections_before_logon_change_{timestamp}.json")
             write_baseline(self.baseline_path, result.updated_roster)
+            if migrated_overrides is not None:
+                temp_path = self.overrides_path.with_suffix(".json.tmp")
+                temp_path.write_text(json.dumps(migrated_overrides, indent=2, ensure_ascii=False), encoding="utf-8")
+                os.replace(temp_path, self.overrides_path)
+                # Record the human-confirmed mapping alongside this month's backups.
+                receipt = {
+                    "confirmed_by": getpass.getuser(),
+                    "approved_at": datetime.now().isoformat(timespec="seconds"),
+                    "baseline_hash": result.baseline.file_hash,
+                    "monthly_hash": result.monthly_pull.file_hash,
+                    "new_to_old_logon_names": result.confirmed_logon_changes,
+                }
+                (self.history_dir / f"confirmed_logon_changes_{timestamp}.json").write_text(
+                    json.dumps(receipt, indent=2, ensure_ascii=False), encoding="utf-8",
+                )
 
             new_hash = file_sha256(self.baseline_path)
             # Append one audit entry per approval; write headings only for a new log.
@@ -247,3 +309,4 @@ class SharedRosterStore:
                     ]
                 )
         return report_path, backup_path
+

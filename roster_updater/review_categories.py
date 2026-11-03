@@ -2,6 +2,7 @@
 
 CATEGORY_LABELS = {
     "changed": "Information changed",
+    "identity": "Logon name review",
     "missing": "Missing from new pull",
     "new": "New employee",
     "manager": "Manager issue",
@@ -10,6 +11,7 @@ CATEGORY_LABELS = {
 
 CATEGORY_COLORS = {
     "changed": "D9EAF7",
+    "identity": "E4DFEC",
     "missing": "F4CCCC",
     "new": "E2F0D9",
     "manager": "FCE4D6",
@@ -25,6 +27,8 @@ def category_for_issue(issue: str) -> str:
     supplied the suggestion. Unknown findings use the information-change color.
     """
     text = issue.casefold()
+    if "logon name change" in text:
+        return "identity"
     if "missing from" in text:
         return "missing"
     if "capability" in text:
@@ -34,3 +38,4 @@ def category_for_issue(issue: str) -> str:
     if "new employee" in text:
         return "new"
     return "changed"
+
