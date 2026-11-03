@@ -74,6 +74,8 @@ class RosterUpdaterApp(RosterView):
         if save:
             self.config_data["shared_folder"] = str(folder)
             self.config_store.save(self.config_data)
+        self.result = None
+        self._clear_result_display()
         self.refresh_baseline_status()
 
     def refresh_baseline_status(self) -> None:
@@ -93,12 +95,15 @@ class RosterUpdaterApp(RosterView):
             self.baseline_status_var.set(str(exc))
 
     def initialize_baseline(self) -> None:
-        """Ask for an approved roster and confirm replacement of an existing baseline.
+        """Ask for the first approved roster when the shared folder has no baseline.
 
         Delegate backup/import to the store and report errors in the window.
         """
         if not self.store:
             messagebox.showinfo("Choose a folder", "Choose the shared roster folder first.")
+            return
+        if self.store.has_baseline():
+            messagebox.showinfo("Baseline already initialized", "For a reviewed Excel report, use Import reviewed roster as baseline. Initialize baseline is only for the first setup of a shared folder.")
             return
         source = filedialog.askopenfilename(
             title="Choose the approved baseline workbook",
@@ -106,14 +111,14 @@ class RosterUpdaterApp(RosterView):
         )
         if not source:
             return
-        if self.store.has_baseline() and not messagebox.askyesno(
-            "Replace the baseline?",
-            "A shared baseline already exists. The app will back it up before replacing it. Continue?",
-        ):
+        if self.store.has_baseline():
+            messagebox.showinfo("Baseline already initialized", "Another baseline appeared while selecting the file. Use the reviewed-import workflow for an existing baseline.")
             return
         try:
             self._set_busy(True, "Initializing the shared baseline...")
             baseline = self.store.initialize(source)
+            self.result = None
+            self._clear_result_display()
             self.status_var.set(f"Baseline initialized with {len(baseline.rows):,} employees.")
             self.refresh_baseline_status()
         except Exception as exc:
@@ -316,6 +321,49 @@ class RosterUpdaterApp(RosterView):
         finally:
             self._set_busy(False)
 
+    def import_reviewed_roster(self) -> None:
+        """Preview a saved Excel draft, ask for approval, then promote its actual edits.
+
+        Does not require an in-memory comparison: export context preserves the
+        baseline/correction snapshot and confirmed links across app restarts.
+        """
+        if not self.store or not self.store.has_baseline():
+            messagebox.showinfo("Initialize baseline", "Choose a shared folder and initialize its baseline before importing a reviewed report.")
+            return
+        source = filedialog.askopenfilename(
+            title="Select the saved reviewed workbook containing Roster Draft",
+            filetypes=[("Excel workbooks", "*.xlsx *.xlsm")],
+        )
+        if not source:
+            return
+        try:
+            self._set_busy(True, "Checking the reviewed workbook...")
+            plan = self.store.prepare_reviewed_import(source)
+            warning = (
+                f"Reviewed file: {plan.reviewed.source_path.name}\n"
+                f"Employees: {len(plan.reviewed.rows):,}\n"
+                f"Fields edited in Excel: {len(plan.edits):,}\n"
+                f"Confirmed username links: {len(plan.confirmed_links):,}\n\n"
+                "This makes the saved Roster Draft values the official baseline, reconciles capability corrections, "
+                "and keeps backups plus the reviewed workbook. Excel Review/Summary tabs remain export-time snapshots.\n\n"
+            )
+            if plan.unresolved_count:
+                warning += f"The original export had {plan.unresolved_count:,} unresolved findings. Verify your review is complete.\n\n"
+            warning += "Have you completed the review and approved this workbook as the next baseline?"
+            if not messagebox.askyesno("Import approved reviewed roster?", warning):
+                return
+            report, backup = self.store.import_reviewed_roster(plan)
+            self.result = None
+            self._clear_result_display()
+            self.pull_path_var.set("")
+            self.refresh_baseline_status()
+            self.status_var.set("Reviewed Excel roster imported as the new baseline. Saved corrections were reconciled.")
+            messagebox.showinfo("Reviewed baseline imported", f"The saved Excel edits are now the baseline.\n\nReviewed workbook: {report}\nPrevious baseline backup: {backup}")
+        except Exception as exc:
+            self._show_error(exc)
+        finally:
+            self._set_busy(False)
+
     def approve_month(self) -> None:
         """Confirm approval, warn about unresolved findings, and delegate persistence.
 
@@ -325,7 +373,7 @@ class RosterUpdaterApp(RosterView):
         if not self.store or not self.result:
             messagebox.showinfo("Run an update", "Run the monthly update before approving it.")
             return
-        warning = "This will save a backup and make the updated roster the new shared baseline."
+        warning = "This saves the app's current comparison as the baseline. It does not read Excel edits. If you edited Roster Draft, cancel and use Import reviewed roster as baseline instead."
         if self.result.unresolved_count:
             warning += f"\n\nThere are still {self.result.unresolved_count:,} capability, manager, or logon-name items to review."
         if not messagebox.askyesno("Approve this month?", warning):
@@ -342,6 +390,7 @@ class RosterUpdaterApp(RosterView):
                 f"Backup: {backup_path}",
             )
             self.result = None
+            self._clear_result_display()
             self.pull_path_var.set("")
         except Exception as exc:
             self._show_error(exc)
@@ -377,4 +426,5 @@ def main() -> None:
     """Construct the desktop application and start Tkinter's event loop."""
     app = RosterUpdaterApp()
     app.mainloop()
+
 

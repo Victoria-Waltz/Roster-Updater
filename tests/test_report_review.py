@@ -39,7 +39,8 @@ class ReportReviewTests(unittest.TestCase):
 
     def test_unchanged_people_stay_in_draft_only(self):
         workbook = self.export()
-        self.assertEqual(workbook.sheetnames, ['Summary', 'Review', 'Changes', 'Roster Draft'])
+        self.assertEqual([sheet.title for sheet in workbook if sheet.sheet_state == 'visible'],
+                         ['Summary', 'Review', 'Changes', 'Roster Draft'])
         self.assertEqual(workbook['Review']['A5'].value, 'blake')
         self.assertEqual(workbook['Review'].max_row, 5)
         self.assertEqual(workbook['Changes']['A5'].value, 'blake')
@@ -105,10 +106,11 @@ class ReportReviewTests(unittest.TestCase):
         guide = next(cell for row in summary for cell in row if cell.value == 'Workbook guide')
         self.assertGreater(guide.row, 5 + 45)
         text = ' '.join(str(cell.value) for row in summary for cell in row if cell.value)
-        self.assertIn('Workbook edits are not read automatically', text)
+        self.assertIn('Import reviewed roster as baseline', text)
         self.assertIn('Initialize baseline', text)
         self.assertIn("does not import edits", text)
 
 
 if __name__ == '__main__':
     unittest.main()
+
