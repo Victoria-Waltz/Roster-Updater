@@ -30,6 +30,20 @@ def normalize_key(value: Any) -> str:
     return clean(value).casefold()
 
 
+def normalize_comparison_value(value: Any) -> str:
+    """Compare missing-value markers consistently without rewriting roster data.
+
+    Excel exports escape a dash as apostrophe-dash. Reimported exports must
+    compare equal to raw dashes and blank cells. Only known missing markers
+    are collapsed; punctuation in real names, identifiers and titles stays.
+    """
+    text = normalize_key(value).strip("\u200b\ufeff \t\r\n\u00a0")
+    marker = text.lstrip("'").strip()
+    if marker in {"", "-", "–", "—", "nan"}:
+        return ""
+    return text
+
+
 def normalize_header(value: Any) -> str:
     """Map a heading to its canonical column name using HEADER_ALIASES.
 
