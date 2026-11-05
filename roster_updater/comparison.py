@@ -12,7 +12,7 @@ from .constants import (
 )
 from .identity import find_logon_candidates, remap_corrections, validate_logon_links
 from .models import ComparisonResult, FieldChange, LoadedRoster, ReviewItem
-from .utils import clean, normalize_key
+from .utils import clean, normalize_comparison_value, normalize_key
 
 
 def _row_map(rows: Iterable[dict[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -164,9 +164,9 @@ def compare_rosters(
                 raw_new_value = clean(source_row.get(field_name))
                 # A missing monthly capability is handled by carry-forward,
                 # so do not report it as an intentional deletion.
-                if field_name == CAPABILITY_HEADER and not raw_new_value:
+                if field_name == CAPABILITY_HEADER and not normalize_comparison_value(raw_new_value):
                     continue
-                if normalize_key(old_value) != normalize_key(raw_new_value):
+                if normalize_comparison_value(old_value) != normalize_comparison_value(raw_new_value):
                     changes.append(
                         FieldChange(
                             logon_name=clean(source_row[KEY_HEADER]),
@@ -375,4 +375,3 @@ def compare_rosters(
         logon_candidates=pending_candidates,
         confirmed_logon_changes=links,
     )
-
